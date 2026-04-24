@@ -116,8 +116,15 @@ print(f"\n✅ Output directories ready at: {OUTPUT_DIR}")
 # CELL 4: Imports
 # ═══════════════════════════════════════════════════════
 
-import time
+import sys
 from pathlib import Path
+
+# Ensure src is in path (for exec() compatibility)
+repo_root = Path(__file__).parent if "__file__" in dir() else Path.cwd()
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+import time
 from types import SimpleNamespace
 
 import cv2
