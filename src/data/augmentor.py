@@ -29,23 +29,16 @@ def get_train_transforms(image_size: tuple[int, int]) -> Callable:
     """
     return transforms.Compose(
         [
-            # PIL Image is already passed from dataset, no ToPILImage needed
-            # Random horizontal flip
+            # PIL Image is passed from dataset; no ToPILImage needed
+            transforms.Resize(image_size),
             transforms.RandomHorizontalFlip(p=0.5),
-            # Random vertical flip
             transforms.RandomVerticalFlip(p=0.5),
-            # Random rotation by 15 degrees
             transforms.RandomRotation(15),
-            # Color jitter for brightness/contrast/saturation variation
             transforms.ColorJitter(
                 brightness=0.2,
                 contrast=0.2,
-                saturation=0.2,
-                hue=0.1,
             ),
-            # Convert to tensor
             transforms.ToTensor(),
-            # Normalize using ImageNet statistics
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406],
                 std=[0.229, 0.224, 0.225],

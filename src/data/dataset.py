@@ -10,6 +10,7 @@ from typing import Callable
 
 import numpy as np
 import torch
+from PIL import Image
 from torch.utils.data import Dataset
 
 from src.data.preprocessor import preprocess_image
@@ -100,17 +101,22 @@ class MIASDataset(Dataset):
             raise
 
         try:
-            # Convert float32 [0, 1] → uint8 [0, 255] numpy array (H, W, C).
-            # transforms.ToTensor() accepts numpy (H, W, C) uint8 arrays directly,
-            # so no PIL conversion is needed and ToPILImage conflicts are avoided.
+            # Convert float32 [0, 1] → uint8 [0, 255] numpy array (H, W, C)
             image_uint8 = (processed * 255).astype(np.uint8)
         except Exception as e:
             print(f"[ERROR] Failed to convert to uint8 for {image_id}: {e}")
             raise
 
         try:
-            # Apply transform pipeline (expects numpy uint8 or PIL Image)
-            tensor = self.transform(image_uint8)
+            # Convert numpy uint8 array to PIL Image (transforms expect PIL input)
+            image_pil = Image.fromarray(image_uint8)
+        except Exception as e:
+            print(f"[ERROR] Failed to convert to PIL Image for {image_id}: {e}")
+            raise
+
+        try:
+            # Apply transform pipeline (receives PIL Image)
+            tensor = self.transform(image_pil)
         except Exception as e:
             print(f"[ERROR] Transform failed for image {image_id}: {e}")
             raise
