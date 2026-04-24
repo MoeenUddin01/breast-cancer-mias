@@ -15,7 +15,7 @@ from src.pipelines.preprocessing import run_preprocessing_pipeline
 from src.pipelines.resnet_model_training import run_resnet_pipeline
 from src.pipelines.xception_model_training import run_xception_pipeline
 from src.utils import config_loader as config
-from src.utils.helpers import create_directories, seed_everything
+from src.utils.helpers import create_directories, seed_everything, setup_mlflow_dagshub
 
 if TYPE_CHECKING:
     pass
@@ -64,6 +64,10 @@ def main() -> int:
         # Set random seeds for reproducibility
         print("Setting random seeds for reproducibility...")
         seed_everything(config.SEED)
+
+        # Initialize MLflow tracking on DagsHub
+        print("Initializing MLflow tracking on DagsHub...")
+        setup_mlflow_dagshub()
 
         # Create output directories
         print("Creating output directories...")

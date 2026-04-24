@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import mlflow
 import torch
 from sklearn.metrics import (
     accuracy_score,
@@ -101,6 +102,15 @@ def evaluate(
         "recall": recall,
     }
 
+    # Log metrics to MLflow
+    mlflow.log_metrics({
+        "test_accuracy": accuracy,
+        "test_auc": auc,
+        "test_f1": f1,
+        "test_precision": precision,
+        "test_recall": recall,
+    })
+
     # Print metrics
     print(f"\n{'=' * 50}")
     print(f"Evaluation Results: {model_name}")
@@ -140,5 +150,8 @@ def evaluate(
         f.write(report)
 
     print(f"\nReport saved to: {report_path}")
+
+    # Log report artifact to MLflow
+    mlflow.log_artifact(f"outputs/reports/{model_name}_report.txt")
 
     return results

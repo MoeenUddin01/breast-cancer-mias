@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import mlflow
 import torch
 from torch import nn
 from torch.optim import Adam
@@ -188,15 +189,33 @@ def train(
 
     history: dict[str, list[float]] = {
         "train_loss": [],
+        "train_accuracy": [],
         "val_loss": [],
         "val_accuracy": [],
         "val_auc": [],
     }
 
+    # Start MLflow run and log hyperparameters
+    mlflow.start_run(run_name=model_name)
+    mlflow.log_params({
+        "learning_rate": config.LEARNING_RATE,
+        "epochs": config.EPOCHS,
+        "batch_size": getattr(train_loader, "batch_size", None),
+        "patience": config.PATIENCE,
+        "seed": getattr(config, "SEED", None),
+        "optimizer": "Adam",
+        "loss": "BCEWithLogitsLoss",
+    })
+
+    best_auc = 0.0
+    actual_epochs_run = 0
+
     for epoch in range(1, config.EPOCHS + 1):
         # Training phase
         model.train()
         epoch_loss = 0.0
+        train_correct = 0
+        train_total = 0
 
         for images, labels in train_loader:
             images = images.to(device)
@@ -210,7 +229,13 @@ def train(
 
             epoch_loss += loss.item()
 
+            # Compute training accuracy
+            predictions = (torch.sigmoid(outputs) > 0.5).float()
+            train_correct += (predictions == labels.unsqueeze(1)).sum().item()
+            train_total += labels.size(0)
+
         avg_train_loss = epoch_loss / len(train_loader)
+        train_accuracy = 100.0 * train_correct / train_total if train_total > 0 else 0.0
 
         # Validation phase
         val_loss, val_accuracy, val_auc = validate(model, val_loader, criterion, device)
@@ -226,14 +251,38 @@ def train(
 
         # Store history
         history["train_loss"].append(avg_train_loss)
+        history["train_accuracy"].append(train_accuracy)
         history["val_loss"].append(val_loss)
         history["val_accuracy"].append(val_accuracy)
         history["val_auc"].append(val_auc)
+
+        # Log metrics to MLflow
+        mlflow.log_metric("train_loss", avg_train_loss, step=epoch)
+        mlflow.log_metric("train_accuracy", train_accuracy, step=epoch)
+        mlflow.log_metric("val_loss", val_loss, step=epoch)
+        mlflow.log_metric("val_accuracy", val_accuracy, step=epoch)
+        mlflow.log_metric("val_auc", val_auc, step=epoch)
+
+        # Track best AUC
+        if val_auc > best_auc:
+            best_auc = val_auc
+
+        actual_epochs_run = epoch
 
         # Early stopping check
         if early_stopping.step(val_auc, model, model_name):
             print(f"Early stopping triggered at epoch {epoch}")
             break
+
+    # Log final metrics and artifacts to MLflow
+    mlflow.log_metric("best_val_auc", best_auc)
+    mlflow.log_metric("total_epochs_trained", actual_epochs_run)
+
+    best_model_path = f"outputs/models/{model_name}_best.pth"
+    if Path(best_model_path).exists():
+        mlflow.log_artifact(best_model_path)
+
+    mlflow.end_run()
 
     # Save final model and results
     _save_model_and_results(model, model_name, history, config)
