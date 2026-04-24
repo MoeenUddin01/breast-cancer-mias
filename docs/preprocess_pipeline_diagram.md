@@ -4,7 +4,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    src/pipelines/preprocess_and_save.py                      │
+│                    preprocess_and_save.py (Entry Point)                      │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
@@ -20,7 +20,7 @@
                                       │
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  STEP 1: Load Raw Data (loader.py)                                           │
+│  STEP 1: Load Raw Data  (loader.py:32-68)                                     │
 │  ─────────────────────────────────                                           │
 │  • Parse Info.txt → extract (image_id, label) pairs                          │
 │  • Load PGM files with OpenCV                                               │
@@ -35,7 +35,7 @@
                                       │
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  STEP 2: Split by Image ID (splitter.py)                                    │
+│  STEP 2: Split by Image ID  (splitter.py:28-75)                              │
 │  ─────────────────────────────────────                                       │
 │  • Extract unique image IDs                                                 │
 │  • Stratified split: 80% train, 20% test                                    │
@@ -50,13 +50,14 @@
            │                            │
            ▼                            ▼
 ┌────────────────────────────────┐  ┌────────────────────────────────┐
-│  STEP 3A: Process TRAIN Split   │  │  STEP 3B: Process TEST Split  │
+│  STEP 3A: Process TRAIN         │  │  STEP 3B: Process TEST        │
+│  (preprocessor.py:22-86)       │  │  (preprocessor.py:22-86)      │
 │  ─────────────────────────────  │  │  ──────────────────────────── │
 │                                 │  │                                │
 │  for each image:                │  │  for each image:               │
-│    ├─ apply_clahe()            │  │    ├─ apply_clahe()           │
-│    │   └─ CLAHE enhancement   │  │    │   └─ CLAHE enhancement    │
-│    ├─ preprocess_image()      │  │    ├─ preprocess_image()      │
+│    ├─ apply_clahe() (22-55)    │  │    ├─ apply_clahe() (22-55)   │
+│    │   └─ CLAHE enhancement    │  │    │   └─ CLAHE enhancement   │
+│    ├─ preprocess_image() (57-86)│  │    ├─ preprocess_image() (57-86)
 │    │   ├─ grayscale→3ch       │  │    │   ├─ grayscale→3ch       │
 │    │   ├─ resize to 224x224  │  │    │   ├─ resize to 224x224   │
 │    │   └─ normalize [0,1]    │  │    │   └─ normalize [0,1]     │

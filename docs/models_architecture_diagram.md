@@ -61,16 +61,16 @@ This diagram illustrates the structure and relationships between the model compo
 
 ## Module Details
 
-### base.py
+### base.py (12-130)
 Core building blocks shared across all model architectures.
 
-| Function | Purpose |
-|----------|---------|
-| `build_head(in_features)` | Creates classification head with dropout(0.2), Linear(1024), BatchNorm1d, ReLU — returns raw logits for BCEWithLogitsLoss |
-| `freeze_backbone(model)` | Sets requires_grad=False on all model parameters |
-| `unfreeze_backbone(model)` | Sets requires_grad=True on all model parameters |
-| `get_trainable_params(model)` | Returns list of trainable parameters |
-| `count_parameters(model)` | Returns (total, trainable) parameter counts |
+| Function | Line | Purpose |
+|----------|------|---------|
+| `build_head(in_features)` | 12-42 | Creates classification head with dropout(0.2), Linear(1024), BatchNorm1d, ReLU — returns raw logits for BCEWithLogitsLoss |
+| `freeze_backbone(model)` | 44-65 | Sets requires_grad=False on all model parameters |
+| `unfreeze_backbone(model)` | 67-86 | Sets requires_grad=True on all model parameters |
+| `get_trainable_params(model)` | 88-106 | Returns list of trainable parameters |
+| `count_parameters(model)` | 108-130 | Returns (total, trainable) parameter counts |
 
 ### Model Functions
 
