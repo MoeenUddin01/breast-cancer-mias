@@ -21,9 +21,17 @@ def get_efficientnet_b2_model() -> models.EfficientNet:
     Returns:
         models.EfficientNet: EfficientNet-B2 model with custom classification head.
 
+    Raises:
+        RuntimeError: If pretrained weights fail to download or load.
+
     """
-    weights = models.EfficientNet_B2_Weights.IMAGENET1K_V1
-    model = models.efficientnet_b2(weights=weights)
+    try:
+        weights = models.EfficientNet_B2_Weights.IMAGENET1K_V1
+        model = models.efficientnet_b2(weights=weights)
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to load EfficientNet-B2 pretrained weights: {e}"
+        ) from e
 
     freeze_backbone(model)
 

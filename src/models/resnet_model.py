@@ -21,9 +21,17 @@ def get_resnet152_model() -> models.ResNet:
     Returns:
         models.ResNet: ResNet-152 model with custom classification head.
 
+    Raises:
+        RuntimeError: If pretrained weights fail to download or load.
+
     """
-    weights = models.ResNet152_Weights.IMAGENET1K_V1
-    model = models.resnet152(weights=weights)
+    try:
+        weights = models.ResNet152_Weights.IMAGENET1K_V1
+        model = models.resnet152(weights=weights)
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to load ResNet-152 pretrained weights: {e}"
+        ) from e
 
     freeze_backbone(model)
 

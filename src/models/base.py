@@ -52,7 +52,14 @@ def freeze_backbone(model: nn.Module) -> None:
     Returns:
         None
 
+    Raises:
+        TypeError: If model is not an nn.Module.
+
     """
+    if model is None:
+        raise TypeError("model cannot be None")
+    if not isinstance(model, nn.Module):
+        raise TypeError(f"model must be an nn.Module, got {type(model).__name__}")
     for param in model.parameters():
         param.requires_grad = False
 
@@ -66,7 +73,14 @@ def unfreeze_backbone(model: nn.Module) -> None:
     Returns:
         None
 
+    Raises:
+        TypeError: If model is not an nn.Module.
+
     """
+    if model is None:
+        raise TypeError("model cannot be None")
+    if not isinstance(model, nn.Module):
+        raise TypeError(f"model must be an nn.Module, got {type(model).__name__}")
     for param in model.parameters():
         param.requires_grad = True
 
@@ -80,7 +94,14 @@ def get_trainable_params(model: nn.Module) -> list[nn.Parameter]:
     Returns:
         List[nn.Parameter]: List of parameters with requires_grad=True.
 
+    Raises:
+        TypeError: If model is not an nn.Module.
+
     """
+    if model is None:
+        raise TypeError("model cannot be None")
+    if not isinstance(model, nn.Module):
+        raise TypeError(f"model must be an nn.Module, got {type(model).__name__}")
     return [p for p in model.parameters() if p.requires_grad]
 
 
@@ -95,7 +116,14 @@ def count_parameters(model: nn.Module) -> tuple[int, int]:
             - int: Total number of parameters.
             - int: Number of trainable parameters.
 
+    Raises:
+        TypeError: If model is not an nn.Module.
+
     """
+    if model is None:
+        raise TypeError("model cannot be None")
+    if not isinstance(model, nn.Module):
+        raise TypeError(f"model must be an nn.Module, got {type(model).__name__}")
     total = sum(p.numel() for p in model.parameters())
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     return total, trainable

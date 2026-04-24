@@ -6,10 +6,15 @@ and a custom classification head for binary breast cancer detection.
 
 from __future__ import annotations
 
-import torch
 from torch import nn
 
-import timm
+try:
+    import timm
+except ImportError as e:
+    raise ImportError(
+        "timm library is required for Xception model. "
+        "Install with: pip install timm"
+    ) from e
 
 from src.models.base import build_head, freeze_backbone
 
@@ -25,14 +30,20 @@ def get_xception_model() -> nn.Module:
 
     Raises:
         ImportError: If timm library is not installed.
+        RuntimeError: If pretrained weights fail to download or load.
 
     """
-    model = timm.create_model(
-        "xception",
-        pretrained=True,
-        num_classes=0,  # Remove default classifier
-        global_pool="avg",
-    )
+    try:
+        model = timm.create_model(
+            "xception",
+            pretrained=True,
+            num_classes=0,  # Remove default classifier
+            global_pool="avg",
+        )
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to load Xception pretrained weights: {e}"
+        ) from e
 
     freeze_backbone(model)
 
