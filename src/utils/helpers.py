@@ -9,7 +9,11 @@ from pathlib import Path
 import numpy as np
 import torch
 
+import dagshub
+import mlflow
+
 from src.utils import config_loader as config
+from src.utils import config as dagshub_config
 
 
 def seed_everything(seed: int | None = None) -> None:
@@ -135,3 +139,25 @@ def save_report(
         raise IOError(f"Failed to write report to {report_file}: {e}")
 
     return report_file
+
+
+def setup_mlflow_dagshub() -> None:
+    """Initialize MLflow tracking on DagsHub.
+
+    This function sets up MLflow to log experiments to DagsHub by
+    initializing the dagshub integration and setting the experiment name.
+
+    Returns:
+        None
+
+    Raises:
+        Exception: If dagshub.init() or mlflow.set_experiment() fails.
+
+    """
+    dagshub.init(
+        repo_owner=dagshub_config.DAGSHUB_REPO_OWNER,
+        repo_name=dagshub_config.DAGSHUB_REPO_NAME,
+        mlflow=True,
+    )
+    mlflow.set_experiment(dagshub_config.EXPERIMENT_NAME)
+    print("MLflow tracking initialized on DagHub")

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import mlflow
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
@@ -75,6 +76,7 @@ def plot_training_history(
     plt.close()
 
     print(f"Training history plot saved to: {save_path}")
+    mlflow.log_artifact(str(save_path))
 
 
 def plot_confusion_matrix(
@@ -133,6 +135,7 @@ def plot_confusion_matrix(
     plt.close()
 
     print(f"Confusion matrix plot saved to: {save_path}")
+    mlflow.log_artifact(str(save_path))
 
 
 def plot_model_comparison(
@@ -209,3 +212,4 @@ def plot_model_comparison(
     plt.close()
 
     print(f"Model comparison plot saved to: {save_path}")
+    mlflow.log_artifact(str(save_path))
