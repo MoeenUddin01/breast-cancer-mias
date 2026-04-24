@@ -1,6 +1,6 @@
-"""EfficientNet-B2 model training pipeline for MIAS breast cancer detection.
+"""ResNet-152 model training pipeline for MIAS breast cancer detection.
 
-Orchestrates loading the EfficientNet-B2 model, training, evaluation, and visualization.
+Orchestrates loading the ResNet-152 model, training, evaluation, and visualization.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from torch import nn
 
 from src.evaluation.evaluator import evaluate
 from src.evaluation.visualizer import plot_confusion_matrix, plot_training_history
-from src.models.efficientnet_model import get_efficientnet_b2_model
+from src.models.resnet_model import get_resnet152_model
 from src.training.trainer import train
 
 if TYPE_CHECKING:
@@ -56,14 +56,14 @@ def _collect_predictions(
     return y_true, y_pred
 
 
-def run_efficientnet_pipeline(
+def run_resnet_pipeline(
     train_loader: DataLoader,
     test_loader: DataLoader,
     config: SimpleNamespace,
 ) -> tuple[dict[str, float], dict[str, list[float]]]:
-    """Run the complete EfficientNet-B2 training pipeline.
+    """Run the complete ResNet-152 training pipeline.
 
-    Loads the EfficientNet-B2 model, trains it on the training data, evaluates on
+    Loads the ResNet-152 model, trains it on the training data, evaluates on
     the test data, generates visualizations, and returns metrics and history.
 
     Args:
@@ -85,7 +85,7 @@ def run_efficientnet_pipeline(
         RuntimeError: If model loading or training fails.
 
     """
-    model_name = "efficientnet_b2"
+    model_name = "resnet152"
 
     # Validate config has required attributes
     required_attrs = ["DEVICE", "LEARNING_RATE", "EPOCHS", "PATIENCE"]
@@ -93,11 +93,11 @@ def run_efficientnet_pipeline(
         if not hasattr(config, attr):
             raise AttributeError(f"config missing required attribute: {attr}")
 
-    # Load EfficientNet-B2 model
+    # Load ResNet-152 model
     try:
-        model = get_efficientnet_b2_model()
+        model = get_resnet152_model()
     except Exception as e:
-        raise RuntimeError(f"Failed to load EfficientNet-B2 model: {e}") from e
+        raise RuntimeError(f"Failed to load ResNet-152 model: {e}") from e
 
     # Move model to device
     try:
