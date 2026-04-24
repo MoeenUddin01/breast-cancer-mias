@@ -341,6 +341,7 @@ train_loader = DataLoader(
     shuffle=True,
     num_workers=NUM_WORKERS,
     pin_memory=True,
+    drop_last=True,   # Drop last incomplete batch to avoid BatchNorm1d errors
 )
 test_loader = DataLoader(
     test_dataset,
