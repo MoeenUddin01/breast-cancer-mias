@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Kaggle notebook for MIAS breast cancer detection.
 
 Trains Xception, ResNet152, and EfficientNetB2 on MIAS Mammography dataset.
@@ -40,7 +42,6 @@ print("\n✅ Repo ready at:", str(repo_path))
 # ═══════════════════════════════════════════════════════
 
 import glob
-import os
 import pathlib
 import shutil
 
@@ -78,7 +79,6 @@ PLOTS_DIR = "/kaggle/working/outputs/plots/"
 REPORTS_DIR = "/kaggle/working/outputs/reports/"
 
 # Create output directories
-import os
 os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(PLOTS_DIR, exist_ok=True)
 os.makedirs(REPORTS_DIR, exist_ok=True)
@@ -88,8 +88,6 @@ print(f"✅ Output directories ready at: {OUTPUT_DIR}")
 # ═══════════════════════════════════════════════════════
 # CELL 4: Imports
 # ═══════════════════════════════════════════════════════
-
-from __future__ import annotations
 
 import time
 from pathlib import Path
