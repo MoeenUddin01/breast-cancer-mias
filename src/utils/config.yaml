@@ -1,0 +1,35 @@
+# Configuration for MIAS breast cancer detection project
+
+# Data paths (relative to project root)
+data:
+  dir: "dataset/all-mias/"
+  processed_dir: "dataset/all-mias/processed/"
+
+# Output paths
+output:
+  dir: "outputs/"
+  models_dir: "outputs/models/"
+  plots_dir: "outputs/plots/"
+  reports_dir: "outputs/reports/"
+
+# Image parameters
+image:
+  size: [224, 224]  # [height, width]
+
+# Training parameters
+training:
+  batch_size: 32
+  epochs: 40
+  learning_rate: 1.0e-4
+  patience: 6
+  test_size: 0.2
+  seed: 42
+  num_workers: 4
+
+# Model parameters
+model:
+  num_classes: 1
+  names: ["xception", "resnet152", "efficientnet_b2"]
+
+# Device (auto-detected, can override)
+# device: "cuda"  # or "cpu"

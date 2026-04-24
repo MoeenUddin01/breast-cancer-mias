@@ -11,7 +11,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from src.utils import config
+from src.utils import config_loader as config
 
 
 def load_data(data_dir: str | None = None) -> list[tuple[str, np.ndarray, int]]:

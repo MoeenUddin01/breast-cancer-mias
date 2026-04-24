@@ -16,7 +16,7 @@ from src.models.base import (
     freeze_backbone,
     unfreeze_backbone,
 )
-from src.utils import config
+from src.utils import config_loader as config
 
 
 class ResNet152Model(nn.Module):

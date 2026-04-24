@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from src.utils import config
+from src.utils import config_loader as config
 
 
 def seed_everything(seed: int | None = None) -> None:

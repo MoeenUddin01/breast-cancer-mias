@@ -9,7 +9,7 @@ from __future__ import annotations
 import torch
 from torch import nn
 
-from src.utils import config
+from src.utils import config_loader as config
 
 
 class CustomClassificationHead(nn.Module):

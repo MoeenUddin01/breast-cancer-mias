@@ -20,7 +20,7 @@ from src.models.base import (
     freeze_backbone,
     unfreeze_backbone,
 )
-from src.utils import config
+from src.utils import config_loader as config
 
 
 class XceptionModel(nn.Module):
