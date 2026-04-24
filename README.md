@@ -1,134 +1,97 @@
-# Breast Cancer Detection with MIAS Dataset
+# Breast Cancer Detection (MIAS Mammograms)
 
-PyTorch implementation for binary classification of breast cancer from mammogram images using the MIAS dataset. Supports multiple pretrained CNN architectures: Xception, ResNet-152, and EfficientNet-B2.
+Codebase for working with the MIAS mammography dataset, focused on a clean data loading + preprocessing pipeline (CLAHE → resize → normalize) and scaffolding for training pretrained CNN backbones in PyTorch.
+
+## Status
+
+- ✅ Data loading from `Info.txt` + `.pgm` files (`src/data/loader.py`)
+- ✅ Leakage-safe train/test split by image ID (`src/data/splitter.py`)
+- ✅ Preprocess-and-save pipeline to generate PNGs on disk (`src/pipelines/preprocess_and_save.py`)
+- 🚧 Training / evaluation pipelines are not implemented yet (several files are currently placeholders)
 
 ## Project Structure
 
 ```
 .
-├── data/
-│   └── all-mias/              # MIAS dataset (PGM images + Info.txt)
-│       └── processed/         # Preprocessed images (optional)
+├── dataset/
+│   └── all-mias/                    # Put MIAS here (Info.txt + *.pgm)
+│       └── processed/               # Created by preprocess_and_save.py
+├── docs/
+│   └── preprocess_pipeline_diagram.md
 ├── outputs/
-│   ├── models/                # Saved model checkpoints
-│   ├── plots/                 # Training curves and visualizations
-│   └── reports/               # Classification reports
+│   ├── models/
+│   ├── plots/
+│   └── reports/
 ├── src/
 │   ├── data/
-│   │   ├── loader.py          # Load MIAS data from Info.txt
-│   │   ├── splitter.py        # Train/test split by image ID
-│   │   ├── preprocessor.py    # CLAHE + preprocessing pipeline
-│   │   ├── augmentor.py       # Torchvision transforms
-│   │   └── dataset.py         # PyTorch Dataset class
+│   │   ├── loader.py                # Parse Info.txt + load PGM images
+│   │   ├── splitter.py              # Train/test split by image_id
+│   │   ├── preprocessor.py          # CLAHE + preprocessing helpers
+│   │   ├── augmentor.py             # Torchvision transform factories
+│   │   └── dataset.py               # PyTorch Dataset wrapper
+│   ├── models/                      # Backbone wrappers (WIP)
 │   ├── pipelines/
-│   │   ├── preprocess_and_save.py  # Optional: save preprocessed images
-│   │   ├── xception_model_training.py
-│   │   ├── resnet_model_training.py
-│   │   └── efficientnet_model_training.py
+│   │   └── preprocess_and_save.py   # Generate processed PNG dataset
 │   └── utils/
-│       ├── config.py          # Configuration constants
-│       └── helpers.py         # Utility functions
-├── requirements.txt
+│       ├── config.yaml              # Central configuration
+│       ├── config_loader.py         # Loads config.yaml into constants
+│       └── helpers.py               # Seeding, output dirs, reports
 └── README.md
 ```
 
 ## Setup
 
+Python: 3.12+ (see `.python-version`).
+
+This repository currently does not pin dependencies in `requirements.txt` or `pyproject.toml`. Install the core runtime deps manually:
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+
+# Core deps used by the implemented pipeline
+pip install numpy opencv-python pillow pyyaml scikit-learn tqdm
+
+# If/when you use the model code:
+pip install torch torchvision
+pip install timm  # required for Xception
 ```
 
-## Data Preparation
+## Data Layout (MIAS)
 
-1. Download MIAS dataset and place in `data/all-mias/`:
-   - All `.pgm` mammogram images
-   - `Info.txt` metadata file
+Place the MIAS files in:
 
-2. (Optional) Preprocess and save images to disk for faster loading:
-   ```bash
-   python3 -m src.pipelines.preprocess_and_save
-   ```
+```
+dataset/all-mias/
+  Info.txt
+  mdb001.pgm
+  mdb002.pgm
+  ...
+```
 
-## Usage
+Notes:
+- `src/data/loader.py` currently keeps only samples labeled `B` (benign → `0`) and `M` (malignant → `1`). Other labels are skipped.
 
-### Train a Model
+## Preprocess + Save (Recommended First Step)
+
+This generates a disk-backed processed dataset:
 
 ```bash
-# Xception
-python3 -m src.pipelines.xception_model_training
-
-# ResNet-152
-python3 -m src.pipelines.resnet_model_training
-
-# EfficientNet-B2
-python3 -m src.pipelines.efficientnet_model_training
+python3 -m src.pipelines.preprocess_and_save
 ```
 
-### Model Comparison
+Outputs:
+- `dataset/all-mias/processed/train/*.png`
+- `dataset/all-mias/processed/test/*.png`
 
-Trained models, plots, and reports are saved to `outputs/`:
-- Models: `outputs/models/{model_name}_best.pth`
-- Plots: `outputs/plots/`
-- Reports: `outputs/reports/`
+Pipeline details: `docs/preprocess_pipeline_diagram.md`.
 
-## Data Pipeline
+## Configuration
 
-| Stage | File | Purpose |
-|-------|------|---------|
-| Load | `loader.py` | Parse Info.txt, load PGM images as numpy arrays |
-| Split | `splitter.py` | Stratified train/test split by unique image ID (no leakage) |
-| Preprocess | `preprocessor.py` | CLAHE → 3-channel → resize → normalize |
-| Augment | `augmentor.py` | Training: flips, rotation, color jitter. Test: resize only |
-| Dataset | `dataset.py` | PyTorch Dataset applying preprocessor + transforms |
+Edit `src/utils/config.yaml` to change:
+- data locations (`data.dir`, `data.processed_dir`)
+- output locations (`output.*`)
+- image size (`image.size`)
+- split/training knobs (`training.*`)
 
-## Key Components
-
-### Configuration (`src/utils/config.py`)
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `IMAGE_SIZE` | (224, 224) | Input image dimensions |
-| `BATCH_SIZE` | 32 | Training batch size |
-| `EPOCHS` | 40 | Maximum training epochs |
-| `LEARNING_RATE` | 1e-4 | Optimizer learning rate |
-| `PATIENCE` | 6 | Early stopping patience |
-| `TEST_SIZE` | 0.15 | Fraction for test split |
-| `SEED` | 42 | Random seed for reproducibility |
-
-### Helpers (`src/utils/helpers.py`)
-
-- `seed_everything(seed)` - Set random seeds for reproducibility
-- `create_directories()` - Create output directories
-- `get_device()` - Return CUDA if available, else CPU
-- `save_report(report_dict, model_name)` - Save classification report
-
-## Preprocessing Pipeline
-
-1. **CLAHE**: Contrast Limited Adaptive Histogram Equalization (`clipLimit=2.0`, `tileGridSize=(8,8)`)
-2. **3-Channel Conversion**: Stack grayscale to RGB for pretrained models
-3. **Resize**: 224×224 using OpenCV
-4. **Normalize**: Scale to [0, 1] range
-5. **ImageNet Normalization**: Mean=[0.485, 0.456, 0.406], Std=[0.229, 0.224, 0.225]
-
-## Data Augmentation (Training Only)
-
-- Random Horizontal Flip (p=0.5)
-- Random Vertical Flip (p=0.5)
-- Random Rotation (±15°)
-- Color Jitter (brightness, contrast, saturation, hue)
-
-## Code Style
-
-- PEP 8 compliant (enforced by `ruff`)
-- Type annotations on all functions
-- Google-style docstrings
-- Maximum 88 character line length
-
-## Linting
-
-```bash
-ruff check src/ app/
-ruff format src/ app/
-```
+The values are loaded at import-time via `src/utils/config_loader.py`.
