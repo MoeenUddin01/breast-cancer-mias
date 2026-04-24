@@ -43,33 +43,60 @@ print("\n✅ Repo ready at:", str(repo_path))
 
 import glob
 import pathlib
-import shutil
 
-# Auto-discover the MIAS dataset
-dataset_paths = [
-    "/kaggle/input/mias-mammography",
-    "/kaggle/input/mias",
-    "/kaggle/input/mammography",
-]
+print("🔍 Searching for MIAS dataset in /kaggle/input/...")
 
-# Find all-mias folder
+# List all input directories
+input_dirs = glob.glob("/kaggle/input/*")
+print(f"Found input directories: {[Path(d).name for d in input_dirs]}")
+
+# Search patterns for MIAS
 mias_dir = None
-for base_path in dataset_paths:
+
+# Pattern 1: Look for all-mias folder
+for base_path in input_dirs:
     candidates = glob.glob(f"{base_path}/**/all-mias", recursive=True)
     if candidates:
         mias_dir = candidates[0]
+        print(f"✅ Found all-mias folder: {mias_dir}")
         break
 
+# Pattern 2: Look for Info.txt
 if not mias_dir:
-    # Fallback: search for Info.txt
     info_files = glob.glob("/kaggle/input/**/Info.txt", recursive=True)
     if info_files:
         mias_dir = str(pathlib.Path(info_files[0]).parent)
+        print(f"✅ Found Info.txt at: {info_files[0]}")
+
+# Pattern 3: Look for .pgm files
+if not mias_dir:
+    pgm_files = glob.glob("/kaggle/input/**/*.pgm", recursive=True)
+    if pgm_files:
+        mias_dir = str(pathlib.Path(pgm_files[0]).parent)
+        print(f"✅ Found PGM files at: {mias_dir}")
 
 if not mias_dir:
-    raise RuntimeError("Could not find MIAS dataset. Please check the dataset name.")
+    print("❌ Available inputs:")
+    for d in input_dirs:
+        print(f"   - {d}")
+        contents = glob.glob(f"{d}/**", recursive=True)[:10]
+        for c in contents:
+            print(f"      {c}")
+    raise RuntimeError(
+        "Could not find MIAS dataset. "
+        "Please ensure the dataset is added to the notebook inputs."
+    )
 
-print(f"✅ MIAS dataset found at: {mias_dir}")
+# Verify the directory contains expected files
+info_txt_path = pathlib.Path(mias_dir) / "Info.txt"
+pgm_files = list(pathlib.Path(mias_dir).glob("*.pgm"))
+
+print(f"\n📁 Dataset location: {mias_dir}")
+print(f"   Info.txt exists: {info_txt_path.exists()}")
+print(f"   PGM files found: {len(pgm_files)}")
+
+if not info_txt_path.exists() and len(pgm_files) == 0:
+    raise RuntimeError(f"No valid MIAS data found in {mias_dir}")
 
 # Set the data directory for the pipeline
 DATA_DIR = mias_dir
@@ -83,7 +110,7 @@ os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(PLOTS_DIR, exist_ok=True)
 os.makedirs(REPORTS_DIR, exist_ok=True)
 
-print(f"✅ Output directories ready at: {OUTPUT_DIR}")
+print(f"\n✅ Output directories ready at: {OUTPUT_DIR}")
 
 # ═══════════════════════════════════════════════════════
 # CELL 4: Imports
