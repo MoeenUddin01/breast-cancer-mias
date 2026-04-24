@@ -22,7 +22,7 @@ training:
   epochs: 40
   learning_rate: 1.0e-4
   patience: 6
-  test_size: 0.2
+  test_size: 0.15
   seed: 42
   num_workers: 4
 

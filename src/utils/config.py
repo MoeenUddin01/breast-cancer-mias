@@ -5,3 +5,5 @@ from __future__ import annotations
 DAGSHUB_REPO_OWNER = "your_dagshub_username"
 DAGSHUB_REPO_NAME = "breast-cancer-mias"
 EXPERIMENT_NAME = "MIAS_Breast_Cancer_Detection"
+SEED: int = 42
+TEST_SIZE: float = 0.15

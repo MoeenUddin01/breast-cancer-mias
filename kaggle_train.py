@@ -188,10 +188,10 @@ EPOCHS = 40
 BATCH_SIZE = 32
 LEARNING_RATE = 1e-4
 PATIENCE = 6
-SEED = 42
+SEED = dagshub_config.SEED
 
 # Other constants
-TEST_SIZE = 0.2
+TEST_SIZE = dagshub_config.TEST_SIZE
 NUM_WORKERS = 4
 IMAGE_SIZE = (224, 224)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
