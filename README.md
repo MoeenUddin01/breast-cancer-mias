@@ -12,7 +12,7 @@ PyTorch-based deep learning project for binary breast cancer detection from MIAS
 
 ## Project Structure
 
-```
+```text
 .
 ├── artifacts/                       # Trained models and results
 │   ├── resnet/
@@ -51,8 +51,16 @@ PyTorch-based deep learning project for binary breast cancer detection from MIAS
 │   ├── evaluation/                  # Evaluation and visualization
 │   │   ├── evaluator.py             # Metrics computation
 │   │   └── visualizer.py            # Plotting functions
-│   └── pipelines/
-│       └── preprocess_and_save.py   # Generate processed PNG dataset
+│   ├── pipelines/                   # End-to-end training pipelines
+│   │   ├── preprocessing.py         # Data preprocessing pipeline
+│   │   ├── xception_model_training.py
+│   │   ├── resnet_model_training.py
+│   │   ├── efficientnet_model_training.py
+│   │   └── preprocess_and_save.py   # Generate processed PNG dataset
+│   ├── utils/                       # Utilities and configuration
+│   │   ├── helpers.py               # Seed, device, directory helpers
+│   │   └── config_loader.py         # YAML configuration loader
+│   └── main.py                      # Main entry point for full pipeline
 └── README.md
 ```
 
@@ -78,7 +86,7 @@ pip install timm  # Required for Xception
 
 Place the MIAS files in:
 
-```
+```text
 dataset/all-mias/
   Info.txt
   mdb001.pgm
@@ -90,7 +98,27 @@ dataset/all-mias/
 
 ## Usage
 
-### 1. Preprocess and Save Data
+### Quick Start: Run Full Pipeline
+
+Run all preprocessing and model training with a single command:
+
+```bash
+python3 -m src.main
+```
+
+This will:
+
+1. Set random seeds for reproducibility
+2. Create output directories
+3. Preprocess MIAS data (load, split, CLAHE, create DataLoaders)
+4. Train Xception, ResNet-152, and EfficientNet-B2 models
+5. Evaluate each model and generate individual reports/plots
+6. Create a comparison plot across all models
+7. Print a final comparison table to console
+
+### Step-by-Step Usage
+
+#### 1. Preprocess and Save Data
 
 Generate processed PNG dataset:
 
@@ -99,38 +127,58 @@ python3 -m src.pipelines.preprocess_and_save
 ```
 
 Outputs:
+
 - `dataset/all-mias/processed/train/*.png`
 - `dataset/all-mias/processed/test/*.png`
 
-### 2. Train a Model
+#### 2. Preprocessing Pipeline (In-Memory)
 
-Example training script (see `src/pipelines/` for full examples):
+Use the preprocessing pipeline to get DataLoaders directly:
 
 ```python
 from types import SimpleNamespace
-from src.models.resnet_model import create_resnet_model
-from src.data.dataset import create_dataloaders
-from src.training.trainer import train
+from src.pipelines.preprocessing import run_preprocessing_pipeline
 
 config = SimpleNamespace(
+    DATA_DIR="dataset/all-mias",
+    TEST_SIZE=0.2,
+    SEED=42,
+    BATCH_SIZE=16,
+    NUM_WORKERS=4,
+    IMAGE_SIZE=(224, 224),
+)
+
+train_loader, test_loader = run_preprocessing_pipeline(config)
+```
+
+#### 3. Train Individual Models
+
+Train a specific model using its dedicated pipeline:
+
+```python
+from types import SimpleNamespace
+from src.pipelines.resnet_model_training import run_resnet_pipeline
+from src.pipelines.xception_model_training import run_xception_pipeline
+from src.pipelines.efficientnet_model_training import run_efficientnet_pipeline
+
+config = SimpleNamespace(
+    DEVICE="cuda",
     LEARNING_RATE=1e-4,
     EPOCHS=50,
     PATIENCE=10,
-    DEVICE="cuda",
 )
 
-model = create_resnet_model()
-train_loader, val_loader = create_dataloaders()
+# ResNet-152
+metrics, history = run_resnet_pipeline(train_loader, test_loader, config)
 
-history = train(model, train_loader, val_loader, "resnet", config)
+# Xception
+metrics, history = run_xception_pipeline(train_loader, test_loader, config)
+
+# EfficientNet-B2
+metrics, history = run_efficientnet_pipeline(train_loader, test_loader, config)
 ```
 
-Artifacts saved to `artifacts/{model_name}/`:
-- `{model_name}_final.pth`: Final trained weights
-- `{model_name}_best.pth`: Best validation AUC checkpoint
-- `results.json`: Training history and final metrics
-
-### 3. Evaluate a Model
+#### 4. Evaluate a Model
 
 ```python
 from src.evaluation.evaluator import evaluate
@@ -149,7 +197,7 @@ Outputs:
 - `outputs/plots/resnet_history.png`: Training curves
 - `outputs/plots/resnet_confusion_matrix.png`: Confusion matrix
 
-### 4. Compare Models
+#### 5. Compare Models
 
 ```python
 from src.evaluation.visualizer import plot_model_comparison
@@ -163,7 +211,24 @@ plot_model_comparison(
 
 Output: `outputs/plots/model_comparison.png`
 
-## Training Configuration
+## Configuration
+
+Configuration is loaded from `src/utils/config.yaml`. Key parameters:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `DATA_DIR` | str | Path to MIAS dataset directory |
+| `TEST_SIZE` | float | Fraction of data for test set (0.0-1.0) |
+| `SEED` | int | Random seed for reproducibility |
+| `BATCH_SIZE` | int | DataLoader batch size |
+| `NUM_WORKERS` | int | DataLoader worker processes |
+| `IMAGE_SIZE` | tuple | Target image size (H, W) |
+| `LEARNING_RATE` | float | Adam optimizer learning rate |
+| `EPOCHS` | int | Maximum training epochs |
+| `PATIENCE` | int | Early stopping patience (epochs) |
+| `DEVICE` | str | Training device (cuda/cpu) |
+
+### Training-Specific Config
 
 The `train()` function expects a config object with:
 
@@ -178,12 +243,18 @@ The `train()` function expects a config object with:
 
 | Module | Purpose |
 |--------|---------|
+| `src/main.py` | **Entry point** - runs full pipeline with all models |
+| `src/pipelines/preprocessing.py` | End-to-end data preprocessing pipeline |
+| `src/pipelines/resnet_model_training.py` | ResNet-152 training pipeline |
+| `src/pipelines/xception_model_training.py` | Xception training pipeline |
+| `src/pipelines/efficientnet_model_training.py` | EfficientNet-B2 training pipeline |
 | `src/training/trainer.py` | Main training loop with validation |
 | `src/training/validator.py` | Validation metrics (loss, accuracy, AUC) |
 | `src/training/callbacks.py` | EarlyStopping with model checkpointing |
 | `src/evaluation/evaluator.py` | Comprehensive evaluation metrics |
 | `src/evaluation/visualizer.py` | Training curves, confusion matrices, comparisons |
 | `src/models/base.py` | Shared classification head and utilities |
+| `src/utils/helpers.py` | Seed setting, device selection, directory creation |
 
 ## Output Locations
 
