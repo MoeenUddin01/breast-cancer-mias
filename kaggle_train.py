@@ -166,7 +166,9 @@ from src.evaluation.visualizer import (
 )
 
 # Utils imports
+import importlib
 from src.utils import config as dagshub_config
+importlib.reload(dagshub_config)
 from src.utils import config_loader as config
 from src.utils import helpers
 
