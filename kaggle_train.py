@@ -3,48 +3,46 @@
 Trains Xception, ResNet152, and EfficientNetB2 on MIAS Mammography dataset.
 Logs everything to DagHub via MLflow.
 
-Cell-by-cell structure for Kaggle notebook usage.
+Run this in Kaggle with: exec(open("kaggle_train.py").read())
+Prerequisites: pip install torch torchvision timm mlflow dagshub scikit-learn opencv-python tqdm matplotlib seaborn
 """
 
 # ═══════════════════════════════════════════════════════
-# CELL 1: Install dependencies
+# CELL 1: Install dependencies (run manually in Kaggle first)
 # ═══════════════════════════════════════════════════════
-
-!pip install -q torch torchvision timm mlflow dagshub scikit-learn opencv-python tqdm matplotlib seaborn
+# !pip install -q torch torchvision timm mlflow dagshub scikit-learn opencv-python tqdm matplotlib seaborn
 
 # ═══════════════════════════════════════════════════════
 # CELL 2: Load secrets, clone repo, setup paths
 # ═══════════════════════════════════════════════════════
 
 import os
-from kaggle_secrets import UserSecretsClient
-
-secrets = UserSecretsClient()
-
-# Set env vars BEFORE any DagsHub/MLflow code is imported
-token = secrets.get_secret("DAGSHUB_TOKEN")
-os.environ["DAGSHUB_TOKEN"] = token
-os.environ["DAGSHUB_USER_TOKEN"] = token
-os.environ["MLFLOW_TRACKING_USERNAME"] = secrets.get_secret("MLFLOW_TRACKING_USERNAME")
-os.environ["MLFLOW_TRACKING_PASSWORD"] = secrets.get_secret("MLFLOW_TRACKING_PASSWORD")
-
-# Clone the project
-!rm -rf /kaggle/working/breast-cancer-mias
-!git clone https://github.com/MoeenUddin01/breast-cancer-mias.git /kaggle/working/breast-cancer-mias
-
+import subprocess
 import sys
-os.chdir("/kaggle/working/breast-cancer-mias")
-sys.path.insert(0, "/kaggle/working/breast-cancer-mias")
+from pathlib import Path
 
-print("\n✅ Setup complete! Secrets loaded and latest code downloaded.")
+# Clone the project if not already cloned
+repo_path = Path("/kaggle/working/breast-cancer-mias")
+if not repo_path.exists():
+    subprocess.run(
+        ["git", "clone", "https://github.com/MoeenUddin01/breast-cancer-mias.git", str(repo_path)],
+        check=True,
+        capture_output=True,
+    )
+
+os.chdir(str(repo_path))
+sys.path.insert(0, str(repo_path))
+
+print("\n✅ Repo ready at:", str(repo_path))
 
 # ═══════════════════════════════════════════════════════
 # CELL 3: Auto-discover MIAS dataset
 # ═══════════════════════════════════════════════════════
 
+import glob
+import os
 import pathlib
 import shutil
-import glob
 
 # Auto-discover the MIAS dataset
 dataset_paths = [
