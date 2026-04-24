@@ -6,101 +6,38 @@ used across all model architectures (Xception, ResNet, EfficientNet).
 
 from __future__ import annotations
 
-import torch
 from torch import nn
 
-from src.utils import config_loader as config
 
+def build_head(in_features: int) -> nn.Sequential:
+    """Build a custom classification head for binary breast cancer detection.
 
-class CustomClassificationHead(nn.Module):
-    """Custom classification head for binary breast cancer detection.
-
-    Features a fully connected architecture with dropout, batch normalization,
-    and sigmoid activation for binary classification output.
-
-    Attributes:
-        in_features: Number of input features from the backbone.
-        dropout_rate: Dropout probability for regularization.
-        hidden_dim: Dimension of the hidden layer.
-
-    """
-
-    def __init__(
-        self,
-        in_features: int,
-        dropout_rate: float = 0.5,
-        hidden_dim: int = 512,
-    ) -> None:
-        """Initialize the custom classification head.
-
-        Args:
-            in_features: Number of input features from the backbone model.
-            dropout_rate: Dropout probability. Default is 0.5.
-            hidden_dim: Size of the hidden fully connected layer. Default is 512.
-
-        Raises:
-            ValueError: If in_features or hidden_dim is not positive.
-
-        """
-        if in_features <= 0:
-            raise ValueError(f"in_features must be positive, got {in_features}")
-        if hidden_dim <= 0:
-            raise ValueError(f"hidden_dim must be positive, got {hidden_dim}")
-
-        super().__init__()
-
-        self.in_features = in_features
-        self.dropout_rate = dropout_rate
-        self.hidden_dim = hidden_dim
-
-        self.classifier = nn.Sequential(
-            # First dropout layer for regularization
-            nn.Dropout(p=dropout_rate),
-            # Hidden fully connected layer
-            nn.Linear(in_features, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.ReLU(inplace=True),
-            # Second dropout layer
-            nn.Dropout(p=dropout_rate),
-            # Output layer for binary classification
-            nn.Linear(hidden_dim, config.NUM_CLASSES),
-            nn.BatchNorm1d(config.NUM_CLASSES),
-            nn.Sigmoid(),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass through the classification head.
-
-        Args:
-            x: Input tensor with shape (batch_size, in_features).
-
-        Returns:
-            torch.Tensor: Output probabilities with shape (batch_size, NUM_CLASSES).
-
-        """
-        return self.classifier(x)
-
-
-def build_custom_head(
-    in_features: int,
-    dropout_rate: float = 0.5,
-    hidden_dim: int = 512,
-) -> CustomClassificationHead:
-    """Factory function to create a custom classification head.
+    Architecture designed for use with BCEWithLogitsLoss (no sigmoid output).
 
     Args:
         in_features: Number of input features from the backbone model.
-        dropout_rate: Dropout probability. Default is 0.5.
-        hidden_dim: Size of the hidden fully connected layer. Default is 512.
 
     Returns:
-        CustomClassificationHead: Configured classification head module.
+        nn.Sequential: Classification head with dropout, batch norm, and ReLU.
+
+    Raises:
+        ValueError: If in_features is not positive.
 
     """
-    return CustomClassificationHead(
-        in_features=in_features,
-        dropout_rate=dropout_rate,
-        hidden_dim=hidden_dim,
+    if in_features <= 0:
+        raise ValueError(f"in_features must be positive, got {in_features}")
+
+    return nn.Sequential(
+        nn.Dropout(p=0.2),
+        nn.Linear(in_features, 1024),
+        nn.BatchNorm1d(1024),
+        nn.ReLU(),
+        nn.Dropout(p=0.2),
+        nn.Linear(1024, 1024),
+        nn.BatchNorm1d(1024),
+        nn.ReLU(),
+        nn.Dropout(p=0.2),
+        nn.Linear(1024, 1),
     )
 
 
@@ -115,7 +52,14 @@ def freeze_backbone(model: nn.Module) -> None:
     Returns:
         None
 
+    Raises:
+        TypeError: If model is not an nn.Module.
+
     """
+    if model is None:
+        raise TypeError("model cannot be None")
+    if not isinstance(model, nn.Module):
+        raise TypeError(f"model must be an nn.Module, got {type(model).__name__}")
     for param in model.parameters():
         param.requires_grad = False
 
@@ -129,7 +73,14 @@ def unfreeze_backbone(model: nn.Module) -> None:
     Returns:
         None
 
+    Raises:
+        TypeError: If model is not an nn.Module.
+
     """
+    if model is None:
+        raise TypeError("model cannot be None")
+    if not isinstance(model, nn.Module):
+        raise TypeError(f"model must be an nn.Module, got {type(model).__name__}")
     for param in model.parameters():
         param.requires_grad = True
 
@@ -143,7 +94,14 @@ def get_trainable_params(model: nn.Module) -> list[nn.Parameter]:
     Returns:
         List[nn.Parameter]: List of parameters with requires_grad=True.
 
+    Raises:
+        TypeError: If model is not an nn.Module.
+
     """
+    if model is None:
+        raise TypeError("model cannot be None")
+    if not isinstance(model, nn.Module):
+        raise TypeError(f"model must be an nn.Module, got {type(model).__name__}")
     return [p for p in model.parameters() if p.requires_grad]
 
 
@@ -158,7 +116,14 @@ def count_parameters(model: nn.Module) -> tuple[int, int]:
             - int: Total number of parameters.
             - int: Number of trainable parameters.
 
+    Raises:
+        TypeError: If model is not an nn.Module.
+
     """
+    if model is None:
+        raise TypeError("model cannot be None")
+    if not isinstance(model, nn.Module):
+        raise TypeError(f"model must be an nn.Module, got {type(model).__name__}")
     total = sum(p.numel() for p in model.parameters())
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     return total, trainable
