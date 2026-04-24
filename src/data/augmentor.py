@@ -29,8 +29,7 @@ def get_train_transforms(image_size: tuple[int, int]) -> Callable:
     """
     return transforms.Compose(
         [
-            # Convert numpy array to PIL Image for augmentation compatibility
-            transforms.ToPILImage(),
+            # PIL Image is already passed from dataset, no ToPILImage needed
             # Random horizontal flip
             transforms.RandomHorizontalFlip(p=0.5),
             # Random vertical flip
@@ -69,8 +68,7 @@ def get_test_transforms(image_size: tuple[int, int]) -> Callable:
     """
     return transforms.Compose(
         [
-            # Convert numpy array to PIL Image
-            transforms.ToPILImage(),
+            # PIL Image is already passed from dataset, no ToPILImage needed
             # Resize to target size
             transforms.Resize(image_size),
             # Convert to tensor
