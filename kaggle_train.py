@@ -140,7 +140,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 # Data imports
-from src.data.augmentor import get_test_transforms, get_train_transforms
+from src.data.augmentor import augment_training_data, get_test_transforms, get_train_transforms
 from src.data.dataset import MIASDataset
 from src.data.loader import load_data
 from src.data.preprocessor import apply_clahe
@@ -305,7 +305,12 @@ if overlap:
 # CELL 8: Preprocessing and DataLoaders
 # ═══════════════════════════════════════════════════════
 
-# Apply CLAHE to all images
+# Step 1: Expand training set BEFORE CLAHE so every augmented image
+#         also receives CLAHE enhancement. Test data is never touched.
+print("Expanding training set with offline augmentations...")
+train_data = augment_training_data(train_data)
+
+# Step 2: Apply CLAHE to every sample (original + augmented)
 print("Applying CLAHE to training images...")
 train_data_processed = [
     (img_id, apply_clahe(img_array), label)
@@ -351,8 +356,9 @@ test_loader = DataLoader(
     pin_memory=True,
 )
 
-print(f"\n✓ Train batches: {len(train_loader)}")
-print(f"✓ Test batches: {len(test_loader)}")
+print(f"\n✓ Train samples after augmentation: {len(train_data_processed)}")
+print(f"✓ Train batches: {len(train_loader)}  (was ~3 before augmentation)")
+print(f"✓ Test batches:  {len(test_loader)}")
 
 # ═══════════════════════════════════════════════════════
 # CELL 9: Model initialization function

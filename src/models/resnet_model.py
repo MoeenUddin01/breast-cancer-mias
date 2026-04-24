@@ -35,6 +35,11 @@ def get_resnet152_model() -> models.ResNet:
 
     freeze_backbone(model)
 
+    # Unfreeze the last residual block (layer4) for fine-tuning.
+    # This allows the model to adapt ImageNet features to mammography.
+    for param in model.layer4.parameters():
+        param.requires_grad = True
+
     model.fc = build_head(in_features=2048)
 
     return model

@@ -35,6 +35,11 @@ def get_efficientnet_b2_model() -> models.EfficientNet:
 
     freeze_backbone(model)
 
+    # Unfreeze the last 3 feature blocks for fine-tuning.
+    # This allows the model to adapt ImageNet features to mammography.
+    for param in model.features[-3:].parameters():
+        param.requires_grad = True
+
     # EfficientNet-B2 classifier has in_features=1408 at classifier[1]
     model.classifier = build_head(in_features=1408)
 
