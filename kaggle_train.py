@@ -416,6 +416,10 @@ def verbose_train(
     """
     start_time = time.time()
 
+    # End any active run first (for exec() re-runs)
+    if mlflow.active_run():
+        mlflow.end_run()
+
     # Start MLflow run
     mlflow.start_run(run_name=model_name)
 
