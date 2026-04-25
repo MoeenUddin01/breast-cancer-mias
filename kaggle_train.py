@@ -642,10 +642,7 @@ print("Training function ready")
 
 def save_model_report(model_name, model, history,
                       best_epoch, train_time, test_loader, device):
-    """Generate comprehensive report for a trained model.
-
-    Evaluates model, saves text report, generates visualizations,
-    and logs everything to DagHub.
+    """Lightweight report generation for a trained model.
 
     Args:
         model_name: Name of the model (e.g., "resnet152")
@@ -660,13 +657,10 @@ def save_model_report(model_name, model, history,
         Dictionary containing all computed metrics
 
     """
-    print(f"\n{'='*60}")
-    print(f"  GENERATING REPORT FOR {model_name.upper()}")
-    print(f"{'='*60}")
+    print(f"\n📊 Saving {model_name} report...")
 
-    # Get predictions on test set
+    # Get predictions (fast)
     model.eval()
-    all_preds = []
     all_probs = []
     all_labels = []
 
@@ -674,17 +668,17 @@ def save_model_report(model_name, model, history,
         for images, labels in test_loader:
             images = images.to(device)
             outputs = model(images)
-            probs = torch.sigmoid(outputs).squeeze().cpu().numpy()
-            preds = (probs >= 0.5).astype(int)
-            all_probs.extend(probs if probs.ndim > 0 else [probs.item()])
-            all_preds.extend(preds if preds.ndim > 0 else [preds.item()])
+            probs = torch.sigmoid(outputs).squeeze()
+            if probs.dim() == 0:
+                probs = probs.unsqueeze(0)
+            all_probs.extend(probs.cpu().numpy())
             all_labels.extend(labels.numpy())
 
     all_labels = np.array(all_labels)
-    all_preds = np.array(all_preds)
     all_probs = np.array(all_probs)
+    all_preds = (all_probs >= 0.5).astype(int)
 
-    # Compute all metrics
+    # Compute metrics
     accuracy = accuracy_score(all_labels, all_preds)
     auc_score = roc_auc_score(all_labels, all_probs)
     f1 = f1_score(all_labels, all_preds)
@@ -693,62 +687,23 @@ def save_model_report(model_name, model, history,
     cm = confusion_matrix(all_labels, all_preds)
     tn, fp, fn, tp = cm.ravel()
     specificity = tn / (tn + fp)
-    fpr, tpr, _ = roc_curve(all_labels, all_probs)
 
-    # Save .txt report
-    date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-    report_path = f"outputs/reports/{model_name}_report.txt"
-
-    with open(report_path, "w") as f:
-        f.write("=" * 60 + "\n")
-        f.write(f"  {model_name.upper()} - BREAST CANCER DETECTION\n")
-        f.write("=" * 60 + "\n")
-        f.write(f"  Date        : {date_str}\n")
-        f.write(f"  Dataset     : BreakHis All Magnifications\n")
-        f.write(f"  Total images: 7,909\n")
-        f.write(f"  Train/Test  : 85% / 15% split by patient\n")
-        f.write(f"  Train time  : {train_time:.1f} minutes\n")
-        f.write(f"  Best epoch  : {best_epoch}\n")
-        f.write("=" * 60 + "\n\n")
-        f.write("  PERFORMANCE METRICS:\n")
-        f.write(f"  {'─'*40}\n")
-        f.write(f"  AUC-ROC     : {auc_score:.4f}  ← PRIMARY METRIC\n")
-        f.write(f"  Accuracy    : {accuracy:.4f} ({accuracy*100:.2f}%)\n")
-        f.write(f"  F1 Score    : {f1:.4f}\n")
-        f.write(f"  Precision   : {precision:.4f}\n")
-        f.write(f"  Recall      : {recall:.4f}\n")
-        f.write(f"  Specificity : {specificity:.4f}\n\n")
-        f.write("  CONFUSION MATRIX:\n")
-        f.write(f"  {'─'*40}\n")
-        f.write(f"  TN (Benign correct)   : {tn}\n")
-        f.write(f"  FP (Benign missed)    : {fp}\n")
-        f.write(f"  FN (Malignant missed) : {fn}\n")
-        f.write(f"  TP (Malignant correct): {tp}\n\n")
-        f.write("  CLASSIFICATION REPORT:\n")
-        f.write(f"  {'─'*40}\n")
-        f.write(classification_report(all_labels, all_preds,
-                target_names=["Benign", "Malignant"]))
-        f.write("\n")
-        f.write("=" * 60 + "\n")
-        f.write("  ⚠️  Research prototype. Not for clinical use.\n")
-        f.write("=" * 60 + "\n")
-
-    print(f"✅ Report saved: {report_path}")
-
-    # Generate visualization
+    # Simple 1-row visualization
     plt.style.use("dark_background")
-    fig = plt.figure(figsize=(20, 18))
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     fig.suptitle(
-        f"{model_name.upper()} — Breast Cancer Detection Report\n"
-        f"BreakHis Dataset | {date_str} | AUC: {auc_score:.4f}",
-        fontsize=16, fontweight="bold", y=0.98, color="white"
+        f"{model_name.upper()}  |  "
+        f"AUC: {auc_score:.4f}  |  "
+        f"Acc: {accuracy*100:.1f}%  |  "
+        f"F1: {f1:.4f}  |  "
+        f"Best Epoch: {best_epoch}  |  "
+        f"Time: {train_time:.1f} min",
+        fontsize=13, fontweight="bold",
+        color="gold", y=1.02
     )
 
-    gs = gridspec.GridSpec(3, 2, figure=fig,
-                           hspace=0.45, wspace=0.35)
-
     # Plot 1: Training curves
-    ax1 = fig.add_subplot(gs[0, 0])
+    ax1 = axes[0]
     epochs_range = range(1, len(history["train_loss"]) + 1)
     ax1.plot(epochs_range, history["train_loss"],
              "b-", linewidth=2, label="Train Loss")
@@ -758,174 +713,100 @@ def save_model_report(model_name, model, history,
     ax1_twin.plot(epochs_range, history["val_auc"],
                   "g--", linewidth=2, label="Val AUC")
     ax1_twin.set_ylabel("AUC", color="green")
-    # Mark best epoch
     ax1.axvline(x=best_epoch, color="gold",
                 linestyle="--", linewidth=1.5,
-                label=f"Best epoch {best_epoch}")
-    # Phase boundary
-    ax1.axvline(x=5, color="white",
-                linestyle=":", linewidth=1,
-                alpha=0.5)
-    ax1.text(2.5, ax1.get_ylim()[1]*0.95,
-             "Phase 1", color="white",
-             fontsize=8, alpha=0.7)
-    ax1.text(6, ax1.get_ylim()[1]*0.95,
-             "Phase 2", color="white",
-             fontsize=8, alpha=0.7)
-    ax1.set_title("Training History", color="white")
-    ax1.set_xlabel("Epoch")
-    ax1.set_ylabel("Loss")
+                label=f"Best: ep{best_epoch}")
     lines1, labels1 = ax1.get_legend_handles_labels()
     lines2, labels2 = ax1_twin.get_legend_handles_labels()
-    ax1.legend(lines1 + lines2, labels1 + labels2,
-               loc="upper right", fontsize=8)
+    ax1.legend(lines1+lines2, labels1+labels2,
+               fontsize=7, loc="upper right")
+    ax1.set_title("Training Curves", color="white")
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("Loss")
     ax1.grid(True, alpha=0.3)
 
     # Plot 2: Confusion matrix
-    ax2 = fig.add_subplot(gs[0, 1])
+    ax2 = axes[1]
     sns.heatmap(cm, annot=True, fmt="d",
                 cmap="Blues", ax=ax2,
                 xticklabels=["Benign", "Malignant"],
                 yticklabels=["Benign", "Malignant"],
-                annot_kws={"size": 14})
-    ax2.set_title(f"Confusion Matrix\nAUC: {auc_score:.4f}",
-                  color="white")
-    ax2.set_ylabel("True Label")
-    ax2.set_xlabel("Predicted Label")
+                annot_kws={"size": 14, "weight": "bold"})
+    ax2.set_title("Confusion Matrix", color="white")
+    ax2.set_ylabel("True")
+    ax2.set_xlabel("Predicted")
 
-    # Plot 3: Metrics bar chart
-    ax3 = fig.add_subplot(gs[1, 0])
-    metric_names = ["Accuracy", "AUC-ROC", "F1",
+    # Plot 3: Metrics bars
+    ax3 = axes[2]
+    metric_names = ["AUC", "Accuracy", "F1",
                      "Precision", "Recall", "Specificity"]
-    metric_values = [accuracy, auc_score, f1,
+    metric_values = [auc_score, accuracy, f1,
                      precision, recall, specificity]
-    colors = ["#3498db", "#e74c3c", "#2ecc71",
+    colors = ["#e74c3c", "#3498db", "#2ecc71",
               "#f39c12", "#9b59b6", "#1abc9c"]
     bars = ax3.bar(metric_names, metric_values,
                    color=colors, alpha=0.85)
     for bar, val in zip(bars, metric_values):
-        ax3.text(bar.get_x() + bar.get_width()/2,
-                 bar.get_height() + 0.01,
-                 f"{val:.3f}", ha="center",
-                 va="bottom", fontsize=9,
-                 color="white", fontweight="bold")
+        ax3.text(
+            bar.get_x() + bar.get_width()/2,
+            bar.get_height() + 0.01,
+            f"{val:.3f}", ha="center",
+            va="bottom", fontsize=9,
+            color="white", fontweight="bold"
+        )
     ax3.set_ylim(0, 1.15)
-    ax3.set_title("Performance Metrics", color="white")
+    ax3.axhline(y=0.9, color="gold",
+                linestyle="--", alpha=0.5)
+    ax3.set_title("Metrics", color="white")
     ax3.set_ylabel("Score")
     ax3.tick_params(axis="x", rotation=30)
     ax3.grid(True, alpha=0.3, axis="y")
-    ax3.axhline(y=0.9, color="gold",
-                linestyle="--", alpha=0.5,
-                linewidth=1, label="0.90 threshold")
-    ax3.legend(fontsize=8)
 
-    # Plot 4: ROC curve
-    ax4 = fig.add_subplot(gs[1, 1])
-    roc_auc = auc(fpr, tpr)
-    ax4.plot(fpr, tpr, color="#e74c3c",
-             linewidth=2.5,
-             label=f"ROC Curve (AUC = {roc_auc:.4f})")
-    ax4.fill_between(fpr, tpr, alpha=0.2, color="#e74c3c")
-    ax4.plot([0, 1], [0, 1], "w--",
-             linewidth=1, alpha=0.5,
-             label="Random Classifier")
-    ax4.set_xlim([0.0, 1.0])
-    ax4.set_ylim([0.0, 1.05])
-    ax4.set_xlabel("False Positive Rate")
-    ax4.set_ylabel("True Positive Rate")
-    ax4.set_title("ROC Curve", color="white")
-    ax4.legend(loc="lower right", fontsize=9)
-    ax4.grid(True, alpha=0.3)
+    plt.tight_layout()
 
-    # Plot 5: Summary table (full width)
-    ax5 = fig.add_subplot(gs[2, :])
-    ax5.axis("off")
-
-    summary_data = [
-        ["Metric", "Score", "Interpretation"],
-        ["AUC-ROC ← PRIMARY", f"{auc_score:.4f}",
-         "Excellent" if auc_score > 0.95 else "Good"],
-        ["Accuracy",
-         f"{accuracy:.4f} ({accuracy*100:.1f}%)",
-         "Excellent" if accuracy > 0.90 else "Good"],
-        ["F1 Score", f"{f1:.4f}",
-         "Excellent" if f1 > 0.90 else "Good"],
-        ["Precision", f"{precision:.4f}",
-         "Excellent" if precision > 0.90 else "Good"],
-        ["Recall (Sensitivity)", f"{recall:.4f}",
-         "Excellent" if recall > 0.90 else "Good"],
-        ["Specificity", f"{specificity:.4f}",
-         "Excellent" if specificity > 0.90 else "Good"],
-        ["Best Epoch", f"{best_epoch}",
-         f"Out of {len(history['train_loss'])} epochs"],
-        ["Training Time", f"{train_time:.1f} min", "Tesla T4 GPU"],
-        ["Test Samples", "1,242",
-         "Split by patient ID — no leakage"],
-    ]
-
-    table = ax5.table(
-        cellText=summary_data[1:],
-        colLabels=summary_data[0],
-        cellLoc="center",
-        loc="center",
-        bbox=[0, 0.1, 1, 0.85]
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(11)
-
-    # Style the table
-    for (row, col), cell in table.get_celld().items():
-        if row == 0:
-            cell.set_facecolor("#2c3e50")
-            cell.set_text_props(color="white",
-                                fontweight="bold")
-        elif row == 1:
-            cell.set_facecolor("#c0392b")
-            cell.set_text_props(color="white",
-                                fontweight="bold")
-        elif row % 2 == 0:
-            cell.set_facecolor("#1a1a2e")
-            cell.set_text_props(color="white")
-        else:
-            cell.set_facecolor("#16213e")
-            cell.set_text_props(color="white")
-        cell.set_edgecolor("#444444")
-
-    ax5.set_title(
-        "⚠️  Research prototype only. "
-        "Not for clinical use. Results on held-out "
-        "test set (15% of 7,909 images, split by patient ID)",
-        color="gray", fontsize=9, pad=10
-    )
-
-    # Save and log to DagHub
-    plot_path = f"outputs/plots/{model_name}_individual_report.png"
-    plt.savefig(plot_path, dpi=150,
+    # Save plot
+    plot_path = f"outputs/plots/{model_name}_report.png"
+    plt.savefig(plot_path, dpi=100,
                 bbox_inches="tight",
                 facecolor="black")
     plt.show()
-    print(f"✅ Visualization saved: {plot_path}")
+    plt.close()
 
-    # Log both files to DagHub
+    # Save txt
+    txt_path = f"outputs/reports/{model_name}_report.txt"
+    with open(txt_path, "w") as f:
+        f.write(f"{'='*50}\n")
+        f.write(f"  {model_name.upper()} RESULTS\n")
+        f.write(f"{'='*50}\n")
+        f.write(f"  AUC-ROC     : {auc_score:.4f}\n")
+        f.write(f"  Accuracy    : {accuracy*100:.2f}%\n")
+        f.write(f"  F1 Score    : {f1:.4f}\n")
+        f.write(f"  Precision   : {precision:.4f}\n")
+        f.write(f"  Recall      : {recall:.4f}\n")
+        f.write(f"  Specificity : {specificity:.4f}\n")
+        f.write(f"  Best Epoch  : {best_epoch}\n")
+        f.write(f"  Train Time  : {train_time:.1f} min\n")
+        f.write(f"  TN={tn} FP={fp} FN={fn} TP={tp}\n")
+        f.write(f"{'='*50}\n")
+
+    # Log to DagHub
     if mlflow.active_run():
-        mlflow.log_artifact(report_path)
         mlflow.log_artifact(plot_path)
+        mlflow.log_artifact(txt_path)
         mlflow.log_metrics({
-            "test_accuracy": accuracy,
             "test_auc": auc_score,
+            "test_accuracy": accuracy,
             "test_f1": f1,
             "test_precision": precision,
             "test_recall": recall,
             "test_specificity": specificity
         })
-        print(f"✅ Report and plot logged to DagHub")
 
-    print(f"\n{'='*60}")
-    print(f"  {model_name.upper()} COMPLETE")
-    print(f"  AUC-ROC  : {auc_score:.4f}")
-    print(f"  Accuracy : {accuracy*100:.2f}%")
-    print(f"  F1 Score : {f1:.4f}")
-    print(f"{'='*60}\n")
+    print(f"✅ {model_name} → AUC: {auc_score:.4f} | "
+          f"Acc: {accuracy*100:.1f}% | F1: {f1:.4f}")
+    print(f"✅ Saved: {plot_path}")
+    print(f"✅ Saved: {txt_path}")
+    print(f"✅ Logged to DagHub")
 
     return {
         "accuracy": accuracy,
@@ -935,7 +816,8 @@ def save_model_report(model_name, model, history,
         "recall": recall,
         "specificity": specificity,
         "confusion_matrix": cm.tolist(),
-        "best_epoch": best_epoch
+        "best_epoch": best_epoch,
+        "train_time": train_time
     }
 
 
@@ -978,7 +860,7 @@ else:
 # ═══════════════════════════════════════════════════════
 
 # MANUAL STEP: Set TRAIN_EFFICIENTNET = True after ResNet completes
-TRAIN_EFFICIENTNET = False
+TRAIN_EFFICIENTNET = True
 
 if TRAIN_EFFICIENTNET:
     print("\n" + "=" * 60)
@@ -1012,7 +894,7 @@ else:
 # ═══════════════════════════════════════════════════════
 
 # MANUAL STEP: Set TRAIN_XCEPTION = True after EfficientNet completes
-TRAIN_XCEPTION = True
+TRAIN_XCEPTION = False
 
 if TRAIN_XCEPTION:
     print("\n" + "=" * 60)
