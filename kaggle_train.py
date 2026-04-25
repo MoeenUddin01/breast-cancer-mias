@@ -944,7 +944,7 @@ def save_model_report(model_name, model, history,
 # ═══════════════════════════════════════════════════════
 
 # MANUAL STEP: Set TRAIN_RESNET = True to run this cell
-TRAIN_RESNET = True
+TRAIN_RESNET = False
 
 if TRAIN_RESNET:
     print("\n" + "=" * 60)
@@ -1012,7 +1012,7 @@ else:
 # ═══════════════════════════════════════════════════════
 
 # MANUAL STEP: Set TRAIN_XCEPTION = True after EfficientNet completes
-TRAIN_XCEPTION = False
+TRAIN_XCEPTION = True
 
 if TRAIN_XCEPTION:
     print("\n" + "=" * 60)
@@ -1167,6 +1167,279 @@ if GENERATE_PLOTS:
 else:
     print("Plot generation skipped (set GENERATE_PLOTS = True after evaluation)")
 
+
+def save_best_model_visualization(all_metrics, all_histories,
+                                   all_best_epochs, all_train_times):
+    """Identify best model by AUC-ROC and generate detailed visualization.
+
+    Args:
+        all_metrics: Dict of model metrics {"resnet152": {...}, ...}
+        all_histories: Dict of training histories
+        all_best_epochs: Dict of best epoch numbers
+        all_train_times: Dict of training times in minutes
+
+    """
+    # Find best model by AUC
+    best_model_name = max(all_metrics,
+                          key=lambda k: all_metrics[k]["auc"])
+    best = all_metrics[best_model_name]
+    best_history = all_histories[best_model_name]
+    best_epoch = all_best_epochs[best_model_name]
+    best_train_time = all_train_times[best_model_name]
+
+    print(f"\n{'='*60}")
+    print(f"  🏆 BEST MODEL: {best_model_name.upper()}")
+    print(f"  AUC-ROC: {best['auc']:.4f}")
+    print(f"{'='*60}")
+
+    date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    # Create visualization
+    plt.style.use("dark_background")
+    fig = plt.figure(figsize=(24, 20))
+    fig.suptitle(
+        f"🏆 BEST MODEL: {best_model_name.upper()}\n"
+        f"Breast Cancer Detection — BreakHis Dataset | "
+        f"AUC: {best['auc']:.4f} | {date_str}",
+        fontsize=18, fontweight="bold",
+        y=0.98, color="gold"
+    )
+
+    gs = gridspec.GridSpec(3, 3, figure=fig,
+                           hspace=0.45, wspace=0.35)
+
+    # Plot 1: Training history
+    ax1 = fig.add_subplot(gs[0, 0])
+    epochs_range = range(1, len(best_history["train_loss"]) + 1)
+    ax1.plot(epochs_range, best_history["train_loss"],
+             "b-", linewidth=2, label="Train Loss")
+    ax1.plot(epochs_range, best_history["val_loss"],
+             "r-", linewidth=2, label="Val Loss")
+    ax1_twin = ax1.twinx()
+    ax1_twin.plot(epochs_range, best_history["val_auc"],
+                  "g--", linewidth=2, label="Val AUC")
+    ax1_twin.set_ylabel("AUC", color="green")
+    ax1.axvline(x=best_epoch, color="gold",
+                linestyle="--", linewidth=2,
+                label=f"Best epoch {best_epoch}")
+    ax1.axvline(x=5, color="white",
+                linestyle=":", linewidth=1, alpha=0.5)
+    ax1.text(2, max(best_history["train_loss"])*0.95,
+             "Phase 1", color="white", fontsize=8)
+    ax1.text(6, max(best_history["train_loss"])*0.95,
+             "Phase 2", color="white", fontsize=8)
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax1_twin.get_legend_handles_labels()
+    ax1.legend(lines1+lines2, labels1+labels2,
+               fontsize=7, loc="upper right")
+    ax1.set_title("Training History", color="white")
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("Loss")
+    ax1.grid(True, alpha=0.3)
+
+    # Plot 2: Accuracy curve
+    ax2 = fig.add_subplot(gs[0, 1])
+    ax2.plot(epochs_range, best_history["train_accuracy"],
+             "b-", linewidth=2, label="Train Acc")
+    ax2.plot(epochs_range, best_history["val_accuracy"],
+             "r-", linewidth=2, label="Val Acc")
+    ax2.axvline(x=best_epoch, color="gold",
+                linestyle="--", linewidth=2)
+    ax2.set_title("Accuracy Curves", color="white")
+    ax2.set_xlabel("Epoch")
+    ax2.set_ylabel("Accuracy")
+    ax2.legend(fontsize=8)
+    ax2.grid(True, alpha=0.3)
+
+    # Plot 3: Confusion matrix
+    ax3 = fig.add_subplot(gs[0, 2])
+    cm_array = np.array(best["confusion_matrix"])
+    sns.heatmap(cm_array, annot=True, fmt="d",
+                cmap="Blues", ax=ax3,
+                xticklabels=["Benign", "Malignant"],
+                yticklabels=["Benign", "Malignant"],
+                annot_kws={"size": 14, "weight": "bold"})
+    ax3.set_title(f"Confusion Matrix\n"
+                  f"AUC: {best['auc']:.4f}",
+                  color="white")
+    ax3.set_ylabel("True Label")
+    ax3.set_xlabel("Predicted Label")
+
+    # Plot 4: ROC Curve
+    ax4 = fig.add_subplot(gs[1, 0])
+    ax4.text(0.5, 0.5,
+             f"AUC = {best['auc']:.4f}",
+             ha="center", va="center",
+             fontsize=20, color="gold",
+             fontweight="bold",
+             transform=ax4.transAxes)
+    ax4.set_title("AUC-ROC Score", color="white")
+    ax4.axis("off")
+
+    # Plot 5: Metrics bar chart
+    ax5 = fig.add_subplot(gs[1, 1])
+    metric_names = ["Accuracy", "AUC-ROC", "F1",
+                     "Precision", "Recall", "Specificity"]
+    metric_values = [
+        best["accuracy"], best["auc"], best["f1"],
+        best["precision"], best["recall"], best["specificity"]
+    ]
+    colors = ["#3498db","#e74c3c","#2ecc71",
+              "#f39c12","#9b59b6","#1abc9c"]
+    bars = ax5.bar(metric_names, metric_values,
+                   color=colors, alpha=0.85)
+    for bar, val in zip(bars, metric_values):
+        ax5.text(bar.get_x() + bar.get_width()/2,
+                 bar.get_height() + 0.01,
+                 f"{val:.3f}", ha="center",
+                 va="bottom", fontsize=9,
+                 color="white", fontweight="bold")
+    ax5.set_ylim(0, 1.15)
+    ax5.axhline(y=0.9, color="gold",
+                linestyle="--", alpha=0.5)
+    ax5.set_title("All Metrics", color="white")
+    ax5.set_ylabel("Score")
+    ax5.tick_params(axis="x", rotation=30)
+    ax5.grid(True, alpha=0.3, axis="y")
+
+    # Plot 6: Model comparison bars
+    ax6 = fig.add_subplot(gs[1, 2])
+    model_names_list = list(all_metrics.keys())
+    auc_values = [all_metrics[m]["auc"]
+                  for m in model_names_list]
+    bar_colors = ["gold" if m == best_model_name
+                  else "#3498db"
+                  for m in model_names_list]
+    bars6 = ax6.bar(model_names_list, auc_values,
+                    color=bar_colors, alpha=0.85)
+    for bar, val in zip(bars6, auc_values):
+        ax6.text(bar.get_x() + bar.get_width()/2,
+                 bar.get_height() + 0.002,
+                 f"{val:.4f}", ha="center",
+                 va="bottom", fontsize=9,
+                 color="white", fontweight="bold")
+    ax6.set_ylim(min(auc_values) - 0.05, 1.05)
+    ax6.set_title("Model AUC Comparison\n(Gold = Best)",
+                  color="white")
+    ax6.set_ylabel("AUC-ROC")
+    ax6.tick_params(axis="x", rotation=15)
+    ax6.grid(True, alpha=0.3, axis="y")
+
+    # Plot 7: Summary table (full width)
+    ax7 = fig.add_subplot(gs[2, :])
+    ax7.axis("off")
+
+    table_data = []
+    for mname, mdata in all_metrics.items():
+        table_data.append([
+            "🏆 " + mname.upper()
+            if mname == best_model_name
+            else mname.upper(),
+            f"{mdata['accuracy']*100:.2f}%",
+            f"{mdata['auc']:.4f}",
+            f"{mdata['f1']:.4f}",
+            f"{mdata['precision']:.4f}",
+            f"{mdata['recall']:.4f}",
+            f"{mdata['specificity']:.4f}",
+            f"{all_best_epochs[mname]}",
+            f"{all_train_times[mname]:.1f} min"
+        ])
+
+    col_labels = ["Model", "Accuracy", "AUC-ROC",
+                  "F1", "Precision", "Recall",
+                  "Specificity", "Best Epoch", "Train Time"]
+
+    table = ax7.table(
+        cellText=table_data,
+        colLabels=col_labels,
+        cellLoc="center",
+        loc="center",
+        bbox=[0, 0.1, 1, 0.85]
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(11)
+
+    for (row, col), cell in table.get_celld().items():
+        if row == 0:
+            cell.set_facecolor("#2c3e50")
+            cell.set_text_props(color="white",
+                                fontweight="bold")
+        else:
+            model_row = table_data[row-1][0]
+            if "🏆" in model_row:
+                cell.set_facecolor("#7d6608")
+                cell.set_text_props(color="gold",
+                                    fontweight="bold")
+            elif row % 2 == 0:
+                cell.set_facecolor("#1a1a2e")
+                cell.set_text_props(color="white")
+            else:
+                cell.set_facecolor("#16213e")
+                cell.set_text_props(color="white")
+        cell.set_edgecolor("#444444")
+
+    ax7.set_title(
+        "⚠️  Research prototype only. Not for clinical use.\n"
+        "Results on held-out test set — "
+        "split by patient ID (no data leakage)",
+        color="gray", fontsize=9, pad=10
+    )
+
+    # Save to Kaggle outputs
+    plot_path = "outputs/plots/best_model_report.png"
+    plt.savefig(plot_path, dpi=150,
+                bbox_inches="tight",
+                facecolor="black")
+    plt.show()
+    print(f"✅ Best model visualization saved: {plot_path}")
+
+    # Save best model txt summary
+    txt_path = "outputs/reports/best_model_summary.txt"
+    with open(txt_path, "w") as f:
+        f.write("=" * 60 + "\n")
+        f.write(f"  🏆 BEST MODEL SUMMARY\n")
+        f.write("=" * 60 + "\n")
+        f.write(f"  Date         : {date_str}\n")
+        f.write(f"  Best Model   : {best_model_name.upper()}\n")
+        f.write(f"  Dataset      : BreakHis All Magnifications\n")
+        f.write(f"  Total images : 7,909\n")
+        f.write("=" * 60 + "\n\n")
+        f.write("  ALL MODELS COMPARISON:\n")
+        f.write(f"  {'─'*56}\n")
+        f.write(f"  {'Model':<20} {'AUC':>8} {'Acc':>8} "
+                f"{'F1':>8} {'Recall':>8}\n")
+        f.write(f"  {'─'*56}\n")
+        for mname, mdata in all_metrics.items():
+            marker = " ← BEST" if mname == best_model_name else ""
+            f.write(f"  {mname.upper():<20} "
+                    f"{mdata['auc']:>8.4f} "
+                    f"{mdata['accuracy']:>8.4f} "
+                    f"{mdata['f1']:>8.4f} "
+                    f"{mdata['recall']:>8.4f}"
+                    f"{marker}\n")
+        f.write(f"  {'─'*56}\n\n")
+        f.write("=" * 60 + "\n")
+        f.write("  ⚠️  Research prototype. Not for clinical use.\n")
+        f.write("=" * 60 + "\n")
+
+    print(f"✅ Best model summary saved: {txt_path}")
+
+    # Log everything to DagHub
+    if mlflow.active_run():
+        mlflow.log_artifact(plot_path)
+        mlflow.log_artifact(txt_path)
+        mlflow.log_param("best_model", best_model_name)
+        mlflow.log_metric("best_model_auc", best["auc"])
+        print(f"✅ Best model report logged to DagHub")
+
+    print(f"\n{'='*60}")
+    print(f"  🏆 BEST MODEL: {best_model_name.upper()}")
+    print(f"  AUC-ROC     : {best['auc']:.4f}")
+    print(f"  Accuracy    : {best['accuracy']*100:.2f}%")
+    print(f"  F1 Score    : {best['f1']:.4f}")
+    print(f"{'='*60}\n")
+
+
 # ═══════════════════════════════════════════════════════
 # CELL 16: Final summary
 # ═══════════════════════════════════════════════════════
@@ -1179,16 +1452,41 @@ if SHOW_SUMMARY:
     print("FINAL SUMMARY")
     print("=" * 60)
 
-    # Find best model by test AUC
-    if results:
-        best_model = max(results.items(), key=lambda x: x[1]["auc_roc"])
-        best_name = best_model[0]
-        best_auc = best_model[1]["auc_roc"]
+    # Collect all results
+    all_metrics = {}
+    all_histories = {}
+    all_best_epochs = {}
+    all_train_times = {}
 
-        print(f"\nBest Model: {best_name}")
-        print(f"Test AUC: {best_auc:.4f}")
+    # Add whichever models have been trained
+    if "resnet_metrics" in dir():
+        all_metrics["resnet152"] = resnet_metrics
+        all_histories["resnet152"] = resnet_history
+        all_best_epochs["resnet152"] = resnet_best_epoch
+        all_train_times["resnet152"] = resnet_train_time
 
-    # Total time (manual tracking)
+    if "efficientnet_metrics" in dir():
+        all_metrics["efficientnet_b2"] = efficientnet_metrics
+        all_histories["efficientnet_b2"] = efficientnet_history
+        all_best_epochs["efficientnet_b2"] = efficientnet_best_epoch
+        all_train_times["efficientnet_b2"] = efficientnet_train_time
+
+    if "xception_metrics" in dir():
+        all_metrics["xception"] = xception_metrics
+        all_histories["xception"] = xception_history
+        all_best_epochs["xception"] = xception_best_epoch
+        all_train_times["xception"] = xception_train_time
+
+    if all_metrics:
+        save_best_model_visualization(
+            all_metrics=all_metrics,
+            all_histories=all_histories,
+            all_best_epochs=all_best_epochs,
+            all_train_times=all_train_times
+        )
+    else:
+        print("No models trained yet.")
+
     print("\nWorkflow:")
     print("  1. Run Cell 1-10 to setup")
     print("  2. Run Cell 11 (ResNet152)")
