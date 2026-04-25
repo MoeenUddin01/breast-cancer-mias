@@ -1,12 +1,16 @@
 # Breast Cancer Detection (MIAS Mammograms)
 
-PyTorch-based deep learning project for binary breast cancer detection from MIAS mammography images. Implements a complete ML pipeline with data preprocessing, model training (ResNet, EfficientNet, Xception), evaluation metrics, and visualization tools.
+PyTorch-based deep learning project for binary breast cancer detection from MIAS mammography images. Implements a complete ML pipeline with data preprocessing, model training (ResNet, EfficientNet, Xception), MLflow experiment tracking, REST API, web demo, and visualization tools.
 
 ## Features
 
 - **Data Pipeline**: CLAHE-enhanced preprocessing, train/test splits by image ID, PyTorch DataLoaders
-- **Models**: Pretrained CNN backbones (ResNet-152, EfficientNet-B4, Xception) with custom classification heads
+- **Models**: Pretrained CNN backbones (ResNet-152, EfficientNet-B2, Xception) with custom classification heads
 - **Training**: Adam optimizer, BCEWithLogitsLoss with class weighting, early stopping on validation AUC
+- **Experiment Tracking**: MLflow integration with DagHub for metrics, parameters, artifacts, and model registry
+- **Kaggle Support**: Ready-to-use `kaggle_train.py` for training on Kaggle GPUs with auto-dataset discovery
+- **Web Demo**: Streamlit interactive app for image upload and prediction
+- **REST API**: FastAPI server for programmatic inference
 - **Evaluation**: Comprehensive metrics (accuracy, AUC-ROC, F1, precision, recall), classification reports, confusion matrices
 - **Artifacts**: Automatic model checkpointing and results saving to per-model folders
 
@@ -116,6 +120,46 @@ This will:
 6. Create a comparison plot across all models
 7. Print a final comparison table to console
 
+### Kaggle Notebook Training
+
+Train all 3 models on Kaggle GPUs with MLflow tracking:
+
+**Cell 1:** Install dependencies
+```python
+!pip install -q torch torchvision timm mlflow dagshub scikit-learn opencv-python tqdm matplotlib seaborn
+```
+
+**Cell 2:** Setup secrets and clone repo
+```python
+import os
+from kaggle_secrets import UserSecretsClient
+
+secrets = UserSecretsClient()
+os.environ["DAGSHUB_TOKEN"] = secrets.get_secret("DAGSHUB_TOKEN")
+os.environ["DAGSHUB_USER_TOKEN"] = secrets.get_secret("DAGSHUB_TOKEN")
+os.environ["MLFLOW_TRACKING_USERNAME"] = secrets.get_secret("MLFLOW_TRACKING_USERNAME")
+os.environ["MLFLOW_TRACKING_PASSWORD"] = secrets.get_secret("MLFLOW_TRACKING_PASSWORD")
+
+import os
+os.chdir("/tmp")
+!rm -rf /kaggle/working/breast-cancer-mias
+!git clone https://github.com/MoeenUddin01/breast-cancer-mias.git /kaggle/working/breast-cancer-mias
+
+import sys
+os.chdir("/kaggle/working/breast-cancer-mias")
+sys.path.insert(0, "/kaggle/working/breast-cancer-mias")
+```
+
+**Cell 3:** Run training
+```python
+exec(open("kaggle_train.py").read(), globals())
+```
+
+**Required Kaggle Secrets:**
+- `DAGSHUB_TOKEN` - Your DagHub personal access token
+- `MLFLOW_TRACKING_USERNAME` - Your DagHub username
+- `MLFLOW_TRACKING_PASSWORD` - Same as DAGSHUB_TOKEN
+
 ### Step-by-Step Usage
 
 #### 1. Preprocess and Save Data
@@ -210,6 +254,63 @@ plot_model_comparison(
 ```
 
 Output: `outputs/plots/model_comparison.png`
+
+#### 6. MLflow Experiment Tracking
+
+All training runs are logged to MLflow with DagHub integration:
+
+```python
+import mlflow
+import dagshub
+
+# Initialize DagHub MLflow tracking
+dagshub.init(
+    repo_owner="MoeenUddin01",
+    repo_name="breast-cancer-mias",
+    mlflow=True,
+)
+
+# Training metrics are automatically logged:
+# - train_loss, val_loss, accuracy, auc, f1, recall
+# - confusion matrices, training curves
+# - model artifacts and checkpoints
+```
+
+View experiments at: https://dagshub.com/MoeenUddin01/breast-cancer-mias/experiments
+
+#### 7. Streamlit Web Demo
+
+Run the interactive web app for image upload and prediction:
+
+```bash
+streamlit run app/streamlit.py
+```
+
+Features:
+- Upload mammogram images (PNG, JPG, PGM)
+- Select between trained models (ResNet, EfficientNet, Xception)
+- Real-time prediction with confidence scores
+- Visualize predictions with class probabilities
+
+#### 8. FastAPI REST API
+
+Start the REST API server for programmatic inference:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+Endpoints:
+- `POST /v1/predict` - Predict on uploaded image
+- `GET /v1/health` - Health check
+
+Example usage:
+```bash
+curl -X POST "http://localhost:8000/v1/predict" \
+  -H "accept: application/json" \
+  -F "file=@mdb001.pgm" \
+  -F "model_name=resnet"
+```
 
 ## Configuration
 
