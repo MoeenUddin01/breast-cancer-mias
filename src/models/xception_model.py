@@ -47,10 +47,23 @@ def get_xception_model() -> nn.Module:
 
     freeze_backbone(model)
 
-    # Unfreeze the last 2 blocks of the Xception backbone for fine-tuning.
-    # This allows the model to adapt ImageNet features to mammography.
-    for param in model.blocks[-2:].parameters():
-        param.requires_grad = True
+    # Debug: print Xception structure
+    print("Xception children:")
+    for name, _ in model.named_children():
+        print(f"  - {name}")
+
+    # timm Xception uses named children not .blocks
+    # Unfreeze last 2 named children of the backbone
+    # (everything except the custom fc head we just added)
+    children = list(model.named_children())
+    backbone_children = [(name, module) for name, module
+                         in children if name != "fc"]
+
+    # Unfreeze last 2 backbone children
+    for name, module in backbone_children[-2:]:
+        print(f"Unfreezing: {name}")
+        for param in module.parameters():
+            param.requires_grad = True
 
     # Xception has 2048 features
     model.fc = build_head(in_features=2048)
