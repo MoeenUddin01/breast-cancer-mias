@@ -47,17 +47,20 @@ import pathlib
 print("🔍 Verifying BreakHis dataset...")
 
 # BreakHis dataset paths
-DATA_DIR = "/kaggle/input/breakhis/BreaKHis_v1/histology_slides/breast/"
+DATA_DIR = "/kaggle/input/datasets/ambarish/breakhis/BreaKHis_v1/BreaKHis_v1/histology_slides/breast/"
 MAGNIFICATIONS = ["40X", "100X", "200X", "400X"]
 
 # Verify the directory structure
-data_path = pathlib.Path(DATA_DIR)
-benign_path = data_path / "benign" / "SOB"
-malignant_path = data_path / "malignant" / "SOB"
+benign_path_str = os.path.join(DATA_DIR, "benign/SOB/")
+malignant_path_str = os.path.join(DATA_DIR, "malignant/SOB/")
 
 print(f"\n📁 Dataset location: {DATA_DIR}")
-print(f"   Benign path exists: {benign_path.exists()}")
-print(f"   Malignant path exists: {malignant_path.exists()}")
+print(f"Benign path exists: {os.path.exists(benign_path_str)}")
+print(f"Malignant path exists: {os.path.exists(malignant_path_str)}")
+
+# Convert to pathlib for rglob operations
+benign_path = pathlib.Path(benign_path_str)
+malignant_path = pathlib.Path(malignant_path_str)
 
 if not benign_path.exists() or not malignant_path.exists():
     print("❌ Available inputs:")

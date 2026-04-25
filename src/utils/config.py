@@ -7,7 +7,7 @@ DAGSHUB_REPO_NAME = "breast-cancer-mias"
 EXPERIMENT_NAME = "BreakHis_Breast_Cancer_Detection"
 
 # Dataset configuration
-DATA_DIR = "/kaggle/input/breakhis/BreaKHis_v1/histology_slides/breast/"
+DATA_DIR = "/kaggle/input/datasets/ambarish/breakhis/BreaKHis_v1/BreaKHis_v1/histology_slides/breast/"
 MAGNIFICATIONS = ["40X", "100X", "200X", "400X"]
 
 # Training configuration
