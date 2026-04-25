@@ -316,12 +316,7 @@ print(f"Unique patients in test: {len(test_patient_ids)}")
 # CELL 8: Preprocessing and DataLoaders
 # ═══════════════════════════════════════════════════════
 
-# Step 1: Expand training set BEFORE CLAHE so every augmented image
-#         also receives CLAHE enhancement. Test data is never touched.
-print("Expanding training set with offline augmentations...")
-train_data = augment_training_data(train_data)
-
-# Step 2: Apply CLAHE to every sample (original + augmented)
+# Step 1: Apply CLAHE to training images (no offline augmentation, using online aug)
 print("Applying CLAHE to training images...")
 train_data_processed = [
     (img_id, apply_clahe(img_array), label)
@@ -381,9 +376,10 @@ test_loader = DataLoader(
     pin_memory=True,
 )
 
-print(f"\n✓ Train samples after augmentation: {len(train_data_processed)}")
-print(f"✓ Train batches: {len(train_loader)}  (was ~3 before augmentation)")
-print(f"✓ Test batches:  {len(test_loader)}")
+print(f"✓ Train samples  : {len(train_data)} (online aug each epoch)")
+print(f"✓ Test samples   : {len(test_data)}")
+print(f"✓ Train batches  : {len(train_loader)}")
+print(f"✓ Test batches   : {len(test_loader)}")
 
 # ═══════════════════════════════════════════════════════
 # CELL 9: Model initialization function
