@@ -28,16 +28,16 @@ def build_head(in_features: int) -> nn.Sequential:
         raise ValueError(f"in_features must be positive, got {in_features}")
 
     return nn.Sequential(
-        nn.Dropout(p=0.2),
-        nn.Linear(in_features, 1024),
-        nn.BatchNorm1d(1024),
+        nn.Dropout(p=0.5),
+        nn.Linear(in_features, 512),
+        nn.BatchNorm1d(512),
         nn.ReLU(),
-        nn.Dropout(p=0.2),
-        nn.Linear(1024, 1024),
-        nn.BatchNorm1d(1024),
+        nn.Dropout(p=0.5),
+        nn.Linear(512, 256),
+        nn.BatchNorm1d(256),
         nn.ReLU(),
-        nn.Dropout(p=0.2),
-        nn.Linear(1024, 1),
+        nn.Dropout(p=0.5),
+        nn.Linear(256, 1),
     )
 
 

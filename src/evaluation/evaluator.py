@@ -111,15 +111,15 @@ def evaluate(
         "test_recall": recall,
     })
 
-    # Print metrics
+    # Print metrics (AUC-ROC and F1 are primary metrics for imbalanced data)
     print(f"\n{'=' * 50}")
     print(f"Evaluation Results: {model_name}")
     print(f"{'=' * 50}")
-    print(f"Accuracy:  {accuracy:.4f}")
-    print(f"AUC-ROC:   {auc:.4f}")
-    print(f"F1-Score:  {f1:.4f}")
-    print(f"Precision: {precision:.4f}")
+    print(f"AUC-ROC:   {auc:.4f}  (primary metric)")
+    print(f"F1-Score:  {f1:.4f}  (primary metric)")
     print(f"Recall:    {recall:.4f}")
+    print(f"Precision: {precision:.4f}")
+    print(f"Accuracy:  {accuracy:.4f} (misleading with imbalance)")
     print(f"{'=' * 50}")
 
     # Generate and print classification report
@@ -140,11 +140,11 @@ def evaluate(
     with open(report_path, "w") as f:
         f.write(f"Evaluation Results: {model_name}\n")
         f.write(f"{'=' * 50}\n")
-        f.write(f"Accuracy:  {accuracy:.4f}\n")
-        f.write(f"AUC-ROC:   {auc:.4f}\n")
-        f.write(f"F1-Score:  {f1:.4f}\n")
-        f.write(f"Precision: {precision:.4f}\n")
+        f.write(f"AUC-ROC:   {auc:.4f}  (primary metric for imbalanced data)\n")
+        f.write(f"F1-Score:  {f1:.4f}  (primary metric for imbalanced data)\n")
         f.write(f"Recall:    {recall:.4f}\n")
+        f.write(f"Precision: {precision:.4f}\n")
+        f.write(f"Accuracy:  {accuracy:.4f} (can be misleading with class imbalance)\n")
         f.write(f"{'=' * 50}\n\n")
         f.write("Classification Report:\n")
         f.write(report)

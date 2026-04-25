@@ -1,4 +1,4 @@
-"""Data augmentation for MIAS breast cancer training data.
+"""Data augmentation for BreakHis breast cancer training data.
 
 Applies torchvision transforms ONLY on the training split.
 Test data receives only normalization and resizing without augmentation.
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+import cv2
 import numpy as np
 from PIL import Image
 from torchvision import transforms
@@ -137,6 +138,14 @@ def augment_training_data(
         else:
             contrast = img.copy()
         augmented.append((f"{image_id}_contrast", contrast, label))
+
+        # Gaussian blur
+        blurred = cv2.GaussianBlur(img, (5, 5), 0)
+        augmented.append((f"{image_id}_blur", blurred, label))
+
+        # Brightness + contrast combined
+        bright_contrast = cv2.convertScaleAbs(img, alpha=1.3, beta=15)
+        augmented.append((f"{image_id}_bc", bright_contrast, label))
 
     original_count = len(train_data)
     total_count = len(augmented)
