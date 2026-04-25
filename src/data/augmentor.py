@@ -139,10 +139,6 @@ def augment_training_data(
             contrast = img.copy()
         augmented.append((f"{image_id}_contrast", contrast, label))
 
-        # Gaussian blur
-        blurred = cv2.GaussianBlur(img, (5, 5), 0)
-        augmented.append((f"{image_id}_blur", blurred, label))
-
         # Brightness + contrast combined
         bright_contrast = cv2.convertScaleAbs(img, alpha=1.3, beta=15)
         augmented.append((f"{image_id}_bc", bright_contrast, label))

@@ -4,7 +4,7 @@ PyTorch-based deep learning project for binary breast cancer detection from Brea
 
 ## Features
 
-- **Data Pipeline**: BreakHis 400X magnification RGB images, patient-aware splitting (prevents data leakage), CLAHE-enhanced preprocessing
+- **Data Pipeline**: BreakHis histology RGB images (all magnifications: 40X, 100X, 200X, 400X), train on single magnification or combine all, patient-aware splitting (prevents data leakage), CLAHE-enhanced preprocessing
 - **Class Imbalance Handling**: WeightedRandomSampler for balanced training batches + BCEWithLogitsLoss with computed pos_weight
 - **Models**: Pretrained CNN backbones (ResNet-152, EfficientNet-B2, Xception) with custom classification heads
 - **Training**: Adam optimizer, early stopping on validation AUC-ROC (primary metric for imbalanced data)
@@ -76,6 +76,7 @@ criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 │   ├── models_architecture_diagram.md
 │   ├── preprocess_pipeline_diagram.md
 │   └── training_evaluation_pipeline_diagram.md
+├── verify_breakhis.py               # Dataset verification and statistics
 ├── src/
 │   ├── data/                        # Data loading and preprocessing
 │   │   ├── loader.py                # Load BreakHis PNG images, extract patient_id
@@ -135,9 +136,12 @@ Download the BreakHis dataset from Kaggle and place it at:
   ├── benign/
   │   └── SOB/
   │       └── adenosis/
-  │           └── SOB_B_A_14-4659-400X/
+  │           ├── SOB_B_A_14-4659-40X/    # 40X magnification
+  │           │   └── 001.png
+  │           ├── SOB_B_A_14-4659-100X/   # 100X magnification
+  │           ├── SOB_B_A_14-4659-200X/   # 200X magnification
+  │           └── SOB_B_A_14-4659-400X/   # 400X magnification
   │               └── 001.png
-  │               └── ...
   └── malignant/
       └── SOB/
           └── ductal_carcinoma/
@@ -147,12 +151,14 @@ Download the BreakHis dataset from Kaggle and place it at:
 ```
 
 **Dataset Characteristics:**
-- **Images**: RGB PNG format (700x460 pixels at 400X magnification)
+- **Images**: RGB PNG format (700x460 pixels)
+- **Magnifications**: 40X, 100X, 200X, 400X (selectable or combine all)
 - **Classes**: Benign (label 0) / Malignant (label 1)
-- **Total 400X images**: ~1,820 images
-- **Patient IDs**: Extracted from filenames (e.g., `SOB_B_TA-14-4659-400-001.png` → patient `14-4659`)
+- **Total images**: ~8,000+ images across all magnifications
+- **Patients**: ~82 unique patients (all magnifications combined)
+- **Patient IDs**: Extracted from filenames (e.g., `SOB_B_TA-14-4659-400X-001.png` → patient `14-4659`)
 - **Splitting**: By patient ID (not image ID) to prevent data leakage
-- **Class Imbalance**: Malignant cases outnumber benign (~74% malignant)
+- **Class Imbalance**: ~2.4:1 ratio (malignant outnumber benign)
 
 ## Usage
 
@@ -168,11 +174,21 @@ This will:
 
 1. Set random seeds for reproducibility
 2. Create output directories
-3. Preprocess BreakHis data (load 400X images, patient-aware split, CLAHE, create DataLoaders)
+3. Preprocess BreakHis data (load images from all magnifications, patient-aware split, CLAHE, create DataLoaders)
 4. Train Xception, ResNet-152, and EfficientNet-B2 models
 5. Evaluate each model and generate individual reports/plots
 6. Create a comparison plot across all models
 7. Print a final comparison table to console
+
+### Verify Dataset
+
+Check your BreakHis dataset structure and counts:
+
+```bash
+python verify_breakhis.py
+```
+
+Output shows image counts per magnification, total images, unique patients, and dataset projections after augmentation.
 
 ### Kaggle Notebook Training
 
@@ -398,6 +414,7 @@ The `train()` function expects a config object with:
 
 | Module | Purpose |
 |--------|---------|
+| `verify_breakhis.py` | **Dataset verification** - counts images per magnification, validates patient counts |
 | `src/main.py` | **Entry point** - runs full pipeline with all models |
 | `src/pipelines/preprocessing.py` | End-to-end data preprocessing pipeline |
 | `src/pipelines/resnet_model_training.py` | ResNet-152 training pipeline |
