@@ -38,68 +38,57 @@ sys.path.insert(0, str(repo_path))
 print("\n✅ Repo ready at:", str(repo_path))
 
 # ═══════════════════════════════════════════════════════
-# CELL 3: Auto-discover MIAS dataset
+# CELL 3: BreakHis dataset configuration
 # ═══════════════════════════════════════════════════════
 
 import glob
 import pathlib
 
-print("🔍 Searching for MIAS dataset in /kaggle/input/...")
+print("🔍 Verifying BreakHis dataset...")
 
-# List all input directories
-input_dirs = glob.glob("/kaggle/input/*")
-print(f"Found input directories: {[Path(d).name for d in input_dirs]}")
+# BreakHis dataset paths
+DATA_DIR = "/kaggle/input/breakhis/BreaKHis_v1/histology_slides/breast/"
+MAGNIFICATIONS = ["40X", "100X", "200X", "400X"]
 
-# Search patterns for MIAS
-mias_dir = None
+# Verify the directory structure
+data_path = pathlib.Path(DATA_DIR)
+benign_path = data_path / "benign" / "SOB"
+malignant_path = data_path / "malignant" / "SOB"
 
-# Pattern 1: Look for all-mias folder
-for base_path in input_dirs:
-    candidates = glob.glob(f"{base_path}/**/all-mias", recursive=True)
-    if candidates:
-        mias_dir = candidates[0]
-        print(f"✅ Found all-mias folder: {mias_dir}")
-        break
+print(f"\n📁 Dataset location: {DATA_DIR}")
+print(f"   Benign path exists: {benign_path.exists()}")
+print(f"   Malignant path exists: {malignant_path.exists()}")
 
-# Pattern 2: Look for Info.txt
-if not mias_dir:
-    info_files = glob.glob("/kaggle/input/**/Info.txt", recursive=True)
-    if info_files:
-        mias_dir = str(pathlib.Path(info_files[0]).parent)
-        print(f"✅ Found Info.txt at: {info_files[0]}")
-
-# Pattern 3: Look for .pgm files
-if not mias_dir:
-    pgm_files = glob.glob("/kaggle/input/**/*.pgm", recursive=True)
-    if pgm_files:
-        mias_dir = str(pathlib.Path(pgm_files[0]).parent)
-        print(f"✅ Found PGM files at: {mias_dir}")
-
-if not mias_dir:
+if not benign_path.exists() or not malignant_path.exists():
     print("❌ Available inputs:")
+    input_dirs = glob.glob("/kaggle/input/*")
     for d in input_dirs:
         print(f"   - {d}")
         contents = glob.glob(f"{d}/**", recursive=True)[:10]
         for c in contents:
             print(f"      {c}")
     raise RuntimeError(
-        "Could not find MIAS dataset. "
+        "Could not find BreakHis dataset. "
         "Please ensure the dataset is added to the notebook inputs."
     )
 
-# Verify the directory contains expected files
-info_txt_path = pathlib.Path(mias_dir) / "Info.txt"
-pgm_files = list(pathlib.Path(mias_dir).glob("*.pgm"))
+# Count images for all magnifications
+print("\n" + "=" * 50)
+print("  BREAKHIS DATASET COUNTS BY MAGNIFICATION")
+print("=" * 50)
 
-print(f"\n📁 Dataset location: {mias_dir}")
-print(f"   Info.txt exists: {info_txt_path.exists()}")
-print(f"   PGM files found: {len(pgm_files)}")
+total_benign = 0
+total_malignant = 0
+for mag in MAGNIFICATIONS:
+    benign_images = list(benign_path.rglob(f"{mag}/*.png"))
+    malignant_images = list(malignant_path.rglob(f"{mag}/*.png"))
+    total_benign += len(benign_images)
+    total_malignant += len(malignant_images)
+    print(f"  {mag:4s} → benign: {len(benign_images):4d}  malignant: {len(malignant_images):4d}")
 
-if not info_txt_path.exists() and len(pgm_files) == 0:
-    raise RuntimeError(f"No valid MIAS data found in {mias_dir}")
-
-# Set the data directory for the pipeline
-DATA_DIR = mias_dir
+print("-" * 50)
+print(f"  Total → benign: {total_benign:4d}  malignant: {total_malignant:4d}")
+print("=" * 50)
 OUTPUT_DIR = "/kaggle/working/outputs/"
 MODELS_DIR = "/kaggle/working/outputs/models/"
 PLOTS_DIR = "/kaggle/working/outputs/plots/"
@@ -136,7 +125,7 @@ import torch
 import torch.nn as nn
 from sklearn.metrics import confusion_matrix, roc_auc_score
 from torch.optim import Adam
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from tqdm import tqdm
 
 # Data imports
@@ -144,7 +133,7 @@ from src.data.augmentor import augment_training_data, get_test_transforms, get_t
 from src.data.dataset import MIASDataset
 from src.data.loader import load_data
 from src.data.preprocessor import apply_clahe
-from src.data.splitter import split_by_image_id
+from src.data.splitter import split_by_patient_id
 
 # Model imports
 from src.models.base import count_parameters
@@ -248,35 +237,48 @@ print(f"✓ MLflow tracking URI: {mlflow.get_tracking_uri()}")
 # CELL 6: Load and preview data
 # ═══════════════════════════════════════════════════════
 
-# Load the dataset
-data = load_data(DATA_DIR)
+# Load the dataset with all magnifications
+data = load_data(DATA_DIR, magnifications=MAGNIFICATIONS)
 
-# Count classes
+# Count classes and patients
 benign_count = sum(1 for _, _, label in data if label == 0)
 malignant_count = sum(1 for _, _, label in data if label == 1)
+unique_patients = len({pid.split("_")[0] for pid, _, _ in data})
 
 print(f"\nTotal samples: {len(data)}")
 print(f"Benign samples: {benign_count}")
 print(f"Malignant samples: {malignant_count}")
+print(f"Unique patients: {unique_patients}")
 
-# Preview 3 sample images
-fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-for i, (image_id, image_array, label) in enumerate(data[:3]):
-    axes[i].imshow(image_array, cmap="gray")
+# Preview 8 sample images (benign/malignant at 40X, 100X, 200X, 400X)
+# Get one sample per magnification for each class
+preview_samples = []
+for mag in MAGNIFICATIONS:
+    # Find one benign and one malignant sample for this magnification
+    benign_sample = next((pid, img, lbl) for pid, img, lbl in data if lbl == 0 and mag in pid)
+    malignant_sample = next((pid, img, lbl) for pid, img, lbl in data if lbl == 1 and mag in pid)
+    preview_samples.extend([benign_sample, malignant_sample])
+
+fig, axes = plt.subplots(2, 4, figsize=(16, 8))
+for i, (patient_id, image_array, label) in enumerate(preview_samples):
+    row = i % 2  # Row 0 = benign, Row 1 = malignant
+    col = i // 2  # Columns 0-3 = 40X, 100X, 200X, 400X
+    axes[row, col].imshow(image_array)
+    mag_label = MAGNIFICATIONS[col]
     label_name = "Benign" if label == 0 else "Malignant"
-    axes[i].set_title(f"{image_id}\nLabel: {label_name}")
-    axes[i].axis("off")
+    axes[row, col].set_title(f"{label_name} {mag_label}\nPatient: {patient_id.split('_')[0]}")
+    axes[row, col].axis("off")
 plt.tight_layout()
 plt.savefig(f"{PLOTS_DIR}/data_preview.png", dpi=150)
 plt.show()
 print(f"✓ Preview saved to {PLOTS_DIR}/data_preview.png")
 
 # ═══════════════════════════════════════════════════════
-# CELL 7: Split data (no leakage)
+# CELL 7: Split data (no patient leakage)
 # ═══════════════════════════════════════════════════════
 
-# Split by image ID with stratification
-train_data, test_data = split_by_image_id(data, TEST_SIZE, SEED)
+# Split by patient ID with stratification to prevent data leakage
+train_data, test_data = split_by_patient_id(data, TEST_SIZE, SEED)
 
 print(f"\nTrain size: {len(train_data)}")
 print(f"Test size: {len(test_data)}")
@@ -295,13 +297,17 @@ print(f"\nTest class distribution:")
 print(f"  Benign: {test_benign} ({100*test_benign/len(test_data):.1f}%)")
 print(f"  Malignant: {test_malignant} ({100*test_malignant/len(test_data):.1f}%)")
 
-# Verify no leakage
-train_ids = {img_id for img_id, _, _ in train_data}
-test_ids = {img_id for img_id, _, _ in test_data}
-overlap = train_ids & test_ids
-print(f"\n✓ No image_id overlap: {len(overlap) == 0}")
-if overlap:
-    print(f"  WARNING: Found {len(overlap)} overlapping IDs: {overlap}")
+# Verify no patient leakage
+train_patient_ids = {pid for pid, _, _ in train_data}
+test_patient_ids = {pid for pid, _, _ in test_data}
+patient_overlap = train_patient_ids & test_patient_ids
+print(f"\n✓ No patient_id overlap: {len(patient_overlap) == 0}")
+if patient_overlap:
+    print(f"  WARNING: Found {len(patient_overlap)} overlapping patient IDs: {patient_overlap}")
+
+# Print unique patient counts
+print(f"Unique patients in train: {len(train_patient_ids)}")
+print(f"Unique patients in test: {len(test_patient_ids)}")
 
 # ═══════════════════════════════════════════════════════
 # CELL 8: Preprocessing and DataLoaders
@@ -341,11 +347,25 @@ test_dataset = MIASDataset(
     image_size=IMAGE_SIZE,
 )
 
-# Create DataLoaders
+# Create DataLoaders with WeightedRandomSampler for class imbalance
+# Count classes in training data for weighted sampling
+train_labels = [item[2] for item in train_data_processed]
+class_counts = torch.bincount(torch.tensor(train_labels))
+class_weights = 1.0 / class_counts.float()
+sample_weights = [class_weights[label] for label in train_labels]
+sampler = WeightedRandomSampler(
+    weights=sample_weights,
+    num_samples=len(sample_weights),
+    replacement=True
+)
+
+print(f"Class counts: {class_counts.tolist()}")
+print(f"Class weights: {class_weights.tolist()}")
+
 train_loader = DataLoader(
     train_dataset,
     batch_size=BATCH_SIZE,
-    shuffle=True,
+    sampler=sampler,      # Replaces shuffle=True for class balancing
     num_workers=NUM_WORKERS,
     pin_memory=True,
     drop_last=True,   # Drop last incomplete batch to avoid BatchNorm1d errors
@@ -450,10 +470,11 @@ def verbose_train(
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = Adam(model.parameters(), lr=LEARNING_RATE)
 
-    # Early stopping
+    # Early stopping - monitor val_auc (primary metric for imbalanced data)
     early_stopping = EarlyStopping(
         patience=PATIENCE,
         mode="max",
+        monitor="val_auc",
         save_path=MODELS_DIR,
     )
 

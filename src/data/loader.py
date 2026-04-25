@@ -1,7 +1,7 @@
-"""Data loader for MIAS breast cancer dataset.
+"""Data loader for BreakHis breast cancer dataset.
 
-Handles parsing of Info.txt metadata and loading of PGM mammogram images
-using OpenCV.
+Handles loading of RGB PNG histology images from BreakHis dataset structure.
+Uses 400X magnification images only.
 """
 
 from __future__ import annotations
@@ -11,97 +11,129 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from src.utils import config_loader as config
+from src.utils import config
 
 
-def load_data(data_dir: str | None = None) -> list[tuple[str, np.ndarray, int]]:
-    """Load MIAS dataset from Info.txt and corresponding PGM images.
+def _extract_patient_id(filename: str) -> str:
+    """Extract patient ID from BreakHis filename.
 
-    Parses Info.txt to extract image filenames and labels, then loads
-    each corresponding PGM image using OpenCV.
+    Filename format: SOB_B_TA-14-4659-400-001.png
+    Patient ID is between 3rd and 5th dash: "14-4659"
 
     Args:
-        data_dir: Directory containing Info.txt and PGM images.
+        filename: The image filename.
+
+    Returns:
+        The extracted patient ID.
+
+    """
+    parts = filename.replace(".png", "").split("-")
+    if len(parts) >= 5:
+        return f"{parts[2]}-{parts[3]}"
+    return filename
+
+
+def load_data(
+    data_dir: str | None = None,
+    magnifications: list[str] | None = None,
+) -> list[tuple[str, np.ndarray, int]]:
+    """Load BreakHis dataset from directory structure.
+
+    Walks through data_dir/benign/SOB/ and data_dir/malignant/SOB/
+    recursively to find all PNG images in folders matching the
+    specified magnifications. Patient ID includes magnification suffix
+    to differentiate same-patient images at different magnifications.
+
+    Args:
+        data_dir: Root directory containing benign/ and malignant/ folders.
             If None, uses config.DATA_DIR.
+        magnifications: List of magnification levels to load.
+            If None, uses config.MAGNIFICATIONS.
 
     Returns:
         List of tuples containing:
-            - image_id (str): The image filename (e.g., 'mdb001')
-            - image_array (np.ndarray): Grayscale image loaded with OpenCV
-            - label (int): Binary label (0 for benign/normal, 1 for malignant)
+            - patient_id (str): Extracted patient ID with magnification suffix
+                (e.g., "14-4659_400X")
+            - image_array (np.ndarray): RGB image loaded with OpenCV
+            - label (int): Binary label (0 for benign, 1 for malignant)
 
     Raises:
-        FileNotFoundError: If Info.txt or a referenced image does not exist.
+        FileNotFoundError: If data_dir does not exist.
 
     """
     if data_dir is None:
         data_dir = config.DATA_DIR
 
+    if magnifications is None:
+        magnifications = config.MAGNIFICATIONS
+
     data_path = Path(data_dir)
-    info_path = data_path / "Info.txt"
 
-    if not info_path.exists():
-        raise FileNotFoundError(f"Info.txt not found at: {info_path}")
+    if not data_path.exists():
+        raise FileNotFoundError(f"Data directory not found: {data_path}")
 
-    data = []
-    benign_count = 0
-    malignant_count = 0
+    data: list[tuple[str, np.ndarray, int]] = []
+    mag_counts: dict[str, dict[str, int]] = {
+        mag: {"benign": 0, "malignant": 0} for mag in magnifications
+    }
+    base_patient_ids: set[str] = set()
 
-    try:
-        with open(info_path, "r") as f:
-            for line in f:
-                try:
-                    line = line.strip()
-
-                    # Skip header line
-                    if line == "Truth-Data:":
-                        continue
-
-                    tokens = line.split()
-
-                    # Skip lines with fewer than 4 tokens
-                    if len(tokens) < 4:
-                        continue
-
-                    image_id = tokens[0]
-                    severity = tokens[3]
-
-                    # Map label: B = 0, M = 1
-                    if severity == "B":
-                        label = 0
-                        benign_count += 1
-                    elif severity == "M":
-                        label = 1
-                        malignant_count += 1
-                    else:
-                        # Skip normal/unknown labels
-                        continue
-
-                    # Load the image using OpenCV
-                    image_file = data_path / f"{image_id}.pgm"
+    # Process benign images
+    benign_path = data_path / "benign" / "SOB"
+    if benign_path.exists():
+        for image_file in benign_path.rglob("*.png"):
+            for mag in magnifications:
+                if mag in str(image_file.parent):
                     try:
-                        image_array = cv2.imread(str(image_file), cv2.IMREAD_GRAYSCALE)
+                        img = cv2.imread(str(image_file))
+                        if img is None:
+                            print(f"[WARNING] Failed to load image: {image_file}")
+                            continue
+                        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                        base_patient_id = _extract_patient_id(image_file.name)
+                        patient_id = f"{base_patient_id}_{mag}"
+                        data.append((patient_id, img, 0))
+                        base_patient_ids.add(base_patient_id)
+                        mag_counts[mag]["benign"] += 1
                     except Exception as e:
-                        print(f"[ERROR] cv2.imread failed for {image_file}: {e}")
-                        continue
+                        print(f"[ERROR] Failed to process {image_file}: {e}")
+                    break  # Only count once per magnification
 
-                    if image_array is None:
-                        print(f"[WARNING] Failed to load image: {image_file}")
-                        continue
+    # Process malignant images
+    malignant_path = data_path / "malignant" / "SOB"
+    if malignant_path.exists():
+        for image_file in malignant_path.rglob("*.png"):
+            for mag in magnifications:
+                if mag in str(image_file.parent):
+                    try:
+                        img = cv2.imread(str(image_file))
+                        if img is None:
+                            print(f"[WARNING] Failed to load image: {image_file}")
+                            continue
+                        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                        base_patient_id = _extract_patient_id(image_file.name)
+                        patient_id = f"{base_patient_id}_{mag}"
+                        data.append((patient_id, img, 1))
+                        base_patient_ids.add(base_patient_id)
+                        mag_counts[mag]["malignant"] += 1
+                    except Exception as e:
+                        print(f"[ERROR] Failed to process {image_file}: {e}")
+                    break  # Only count once per magnification
 
-                    data.append((image_id, image_array, label))
-
-                except Exception as e:
-                    print(f"[WARNING] Error processing line '{line}': {e}")
-                    continue
-
-    except FileNotFoundError:
-        print(f"[ERROR] Info.txt not found at: {info_path}")
-        raise
-    except Exception as e:
-        print(f"[ERROR] Failed to read Info.txt: {e}")
-        raise
-
-    print(f"Loaded {benign_count} benign and {malignant_count} malignant samples")
+    # Print per-magnification counts
+    print("\n" + "=" * 50)
+    print("  BREAKHIS DATASET COUNTS BY MAGNIFICATION")
+    print("=" * 50)
+    total_benign = 0
+    total_malignant = 0
+    for mag in magnifications:
+        b_count = mag_counts[mag]["benign"]
+        m_count = mag_counts[mag]["malignant"]
+        total_benign += b_count
+        total_malignant += m_count
+        print(f"  {mag:4s} → benign: {b_count:4d}  malignant: {m_count:4d}")
+    print("-" * 50)
+    print(f"  Total → benign: {total_benign:4d}  malignant: {total_malignant:4d}  patients: {len(base_patient_ids):4d}")
+    print("=" * 50)
 
     return data

@@ -1,7 +1,8 @@
-"""Dataset splitter for MIAS breast cancer data.
+"""Dataset splitter for BreakHis breast cancer data.
 
-Splits data by unique image ID BEFORE augmentation to prevent
-any data leakage between train and test sets.
+Splits data by unique patient ID BEFORE augmentation to prevent
+data leakage between train and test sets. One patient has multiple
+images, so splitting by image ID would leak patient data.
 """
 
 from __future__ import annotations
@@ -10,26 +11,27 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 
 
-def split_by_image_id(
+def split_by_patient_id(
     data: list[tuple[str, np.ndarray, int]],
     test_size: float,
     seed: int,
 ) -> tuple[list[tuple[str, np.ndarray, int]], list[tuple[str, np.ndarray, int]]]:
-    """Split data by unique image IDs with stratification.
+    """Split data by unique patient IDs with stratification.
 
-    Performs a stratified train/test split at the image ID level to
-    ensure no image_id appears in both train and test sets.
+    Performs a stratified train/test split at the patient ID level to
+    ensure no patient_id appears in both train and test sets.
+    This prevents data leakage since one patient has multiple images.
 
     Args:
-        data: List of (image_id, image_array, label) tuples from loader.py.
-        test_size: Fraction of data to use for the test set (0.0 to 1.0).
+        data: List of (patient_id, image_array, label) tuples from loader.py.
+        test_size: Fraction of patients to use for the test set (0.0 to 1.0).
         seed: Random seed for reproducibility, passed to train_test_split
             as random_state.
 
     Returns:
         Tuple containing:
-            - train_data: List of (image_id, image_array, label) for training.
-            - test_data: List of (image_id, image_array, label) for testing.
+            - train_data: List of (patient_id, image_array, label) for training.
+            - test_data: List of (patient_id, image_array, label) for testing.
 
     Raises:
         ValueError: If data is empty or if split results in leakage.
@@ -39,29 +41,34 @@ def split_by_image_id(
         raise ValueError("Data cannot be empty")
 
     try:
-        # Extract unique image IDs and their labels
-        unique_ids = []
-        unique_labels = []
+        # Group images by base patient_id (without magnification suffix)
+        # to ensure all magnifications of same patient stay together
+        patient_images: dict[str, list[tuple[str, np.ndarray, int]]] = {}
+        patient_labels: dict[str, int] = {}
 
-        seen_ids = set()
-        for image_id, _, label in data:
-            if image_id not in seen_ids:
-                unique_ids.append(image_id)
-                unique_labels.append(label)
-                seen_ids.add(image_id)
+        for patient_id, image_array, label in data:
+            # Extract base patient ID (e.g., "14-4659" from "14-4659_400X")
+            base_patient_id = patient_id.split("_")[0]
+            if base_patient_id not in patient_images:
+                patient_images[base_patient_id] = []
+                patient_labels[base_patient_id] = label
+            patient_images[base_patient_id].append((patient_id, image_array, label))
 
-        if len(unique_ids) == 0:
-            raise ValueError("No unique image IDs found in data")
+        unique_patients = list(patient_images.keys())
+        patient_label_list = [patient_labels[pid] for pid in unique_patients]
 
-        if len(set(unique_labels)) < 2:
-            print(f"[WARNING] Only one class found ({set(unique_labels)}), stratification disabled")
+        if len(unique_patients) == 0:
+            raise ValueError("No unique patient IDs found in data")
+
+        if len(set(patient_label_list)) < 2:
+            print(f"[WARNING] Only one class found ({set(patient_label_list)}), stratification disabled")
             stratify = None
         else:
-            stratify = unique_labels
+            stratify = patient_label_list
 
-        # Perform stratified split on unique image IDs
-        train_ids, test_ids = train_test_split(
-            unique_ids,
+        # Perform stratified split on unique patient IDs
+        train_patients, test_patients = train_test_split(
+            unique_patients,
             test_size=test_size,
             random_state=seed,
             stratify=stratify,
@@ -72,30 +79,31 @@ def split_by_image_id(
 
     try:
         # Convert to sets for O(1) lookup
-        train_id_set = set(train_ids)
-        test_id_set = set(test_ids)
+        train_patient_set = set(train_patients)
+        test_patient_set = set(test_patients)
 
         # Verify no overlap
-        overlap = train_id_set & test_id_set
+        overlap = train_patient_set & test_patient_set
         if overlap:
             raise ValueError(f"Data leakage detected: {overlap} appear in both sets")
 
-        # Split original data based on image_id
-        train_data = []
-        test_data = []
+        # Collect all images for train and test patients
+        train_data: list[tuple[str, np.ndarray, int]] = []
+        test_data: list[tuple[str, np.ndarray, int]] = []
 
-        for image_id, image_array, label in data:
-            if image_id in train_id_set:
-                train_data.append((image_id, image_array, label))
-            elif image_id in test_id_set:
-                test_data.append((image_id, image_array, label))
-            else:
-                print(f"[WARNING] Image ID {image_id} not in train or test split")
+        for patient_id in train_patients:
+            train_data.extend(patient_images[patient_id])
+
+        for patient_id in test_patients:
+            test_data.extend(patient_images[patient_id])
 
     except Exception as e:
         print(f"[ERROR] Failed to assign data to train/test sets: {e}")
         raise
 
-    print(f"Train samples: {len(train_data)}, Test samples: {len(test_data)}")
+    print(f"Unique patients in train: {len(train_patients)}")
+    print(f"Unique patients in test: {len(test_patients)}")
+    print(f"Total images in train: {len(train_data)}")
+    print(f"Total images in test: {len(test_data)}")
 
     return train_data, test_data

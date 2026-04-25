@@ -14,8 +14,10 @@ import mlflow
 import torch
 from torch import nn
 from torch.optim import Adam
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 
+from src.models.base import freeze_backbone, get_trainable_params, unfreeze_backbone
 from src.training.callbacks import EarlyStopping
 from src.training.validator import validate
 
@@ -118,6 +120,78 @@ def _compute_pos_weight(train_loader: DataLoader, device: torch.device) -> torch
     return torch.tensor([pos_weight], dtype=torch.float32, device=device)
 
 
+def get_model_head(model: nn.Module, model_name: str) -> nn.Module:
+    """Get the classification head from a model.
+
+    Args:
+        model: The neural network model.
+        model_name: Name identifier for the model.
+
+    Returns:
+        The classification head module.
+
+    Raises:
+        ValueError: If model_name is unknown.
+
+    """
+    if model_name == "resnet152":
+        return model.fc
+    elif model_name == "efficientnet_b2":
+        return model.classifier
+    elif model_name == "xception":
+        return model.fc
+    else:
+        raise ValueError(f"Unknown model: {model_name}")
+
+
+def _train_epoch(
+    model: nn.Module,
+    train_loader: DataLoader,
+    criterion: nn.Module,
+    optimizer: Adam,
+    device: torch.device,
+) -> tuple[float, float]:
+    """Run one training epoch.
+
+    Args:
+        model: The model to train.
+        train_loader: DataLoader for training data.
+        criterion: Loss function.
+        optimizer: Optimizer instance.
+        device: Device to run training on.
+
+    Returns:
+        Tuple of (average_loss, accuracy).
+
+    """
+    model.train()
+    epoch_loss = 0.0
+    train_correct = 0
+    train_total = 0
+
+    for images, labels in train_loader:
+        images = images.to(device)
+        labels = labels.to(device)
+
+        optimizer.zero_grad()
+        outputs = model(images)
+        loss = criterion(outputs, labels.unsqueeze(1))
+        loss.backward()
+        optimizer.step()
+
+        epoch_loss += loss.item()
+
+        # Compute training accuracy
+        predictions = (torch.sigmoid(outputs) > 0.5).float()
+        train_correct += (predictions == labels.unsqueeze(1)).sum().item()
+        train_total += labels.size(0)
+
+    avg_loss = epoch_loss / len(train_loader)
+    accuracy = 100.0 * train_correct / train_total if train_total > 0 else 0.0
+
+    return avg_loss, accuracy
+
+
 def train(
     model: nn.Module,
     train_loader: DataLoader,
@@ -179,11 +253,11 @@ def train(
     # Compute positive weight and initialize loss
     pos_weight = _compute_pos_weight(train_loader, device)
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-    optimizer = Adam(model.parameters(), lr=config.LEARNING_RATE)
 
     early_stopping = EarlyStopping(
         patience=config.PATIENCE,
         mode="max",
+        monitor="val_auc",
         save_path=str(ARTIFACTS_DIR / model_name),
     )
 
@@ -210,44 +284,38 @@ def train(
     best_auc = 0.0
     actual_epochs_run = 0
 
-    for epoch in range(1, config.EPOCHS + 1):
+    # ═══════════════════════════════════════════════════════
+    # PHASE 1: Train head only (5 epochs, lr=1e-3)
+    # ═══════════════════════════════════════════════════════
+
+    PHASE1_EPOCHS = 5
+
+    # Freeze entire backbone first
+    freeze_backbone(model)
+
+    # Unfreeze only the head
+    head = get_model_head(model, model_name)
+    for param in head.parameters():
+        param.requires_grad = True
+
+    optimizer_phase1 = Adam(
+        get_trainable_params(model),
+        lr=1e-3,
+        weight_decay=1e-4
+    )
+
+    print(f"\n{'=' * 60}")
+    print(f"PHASE 1: Training head only for {PHASE1_EPOCHS} epochs (lr=1e-3)")
+    print(f"{'=' * 60}")
+
+    for epoch in range(1, PHASE1_EPOCHS + 1):
         # Training phase
-        model.train()
-        epoch_loss = 0.0
-        train_correct = 0
-        train_total = 0
-
-        for images, labels in train_loader:
-            images = images.to(device)
-            labels = labels.to(device)
-
-            optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels.unsqueeze(1))
-            loss.backward()
-            optimizer.step()
-
-            epoch_loss += loss.item()
-
-            # Compute training accuracy
-            predictions = (torch.sigmoid(outputs) > 0.5).float()
-            train_correct += (predictions == labels.unsqueeze(1)).sum().item()
-            train_total += labels.size(0)
-
-        avg_train_loss = epoch_loss / len(train_loader)
-        train_accuracy = 100.0 * train_correct / train_total if train_total > 0 else 0.0
+        avg_train_loss, train_accuracy = _train_epoch(
+            model, train_loader, criterion, optimizer_phase1, device
+        )
 
         # Validation phase
         val_loss, val_accuracy, val_auc = validate(model, val_loader, criterion, device)
-
-        # Log metrics
-        print(
-            f"Epoch {epoch}/{config.EPOCHS} - "
-            f"Train Loss: {avg_train_loss:.4f}, "
-            f"Val Loss: {val_loss:.4f}, "
-            f"Val Acc: {val_accuracy:.2f}%, "
-            f"Val AUC: {val_auc:.4f}"
-        )
 
         # Store history
         history["train_loss"].append(avg_train_loss)
@@ -262,12 +330,109 @@ def train(
         mlflow.log_metric("val_loss", val_loss, step=epoch)
         mlflow.log_metric("val_accuracy", val_accuracy, step=epoch)
         mlflow.log_metric("val_auc", val_auc, step=epoch)
+        mlflow.log_metric("phase", 1, step=epoch)
 
         # Track best AUC
         if val_auc > best_auc:
             best_auc = val_auc
 
         actual_epochs_run = epoch
+
+        # Print epoch results
+        print(
+            f"Epoch {epoch}/{config.EPOCHS} (Phase 1) - "
+            f"Train Loss: {avg_train_loss:.4f}, "
+            f"Val Loss: {val_loss:.4f}, "
+            f"Val Acc: {val_accuracy:.2f}%, "
+            f"Val AUC: {val_auc:.4f}"
+        )
+
+    # ═══════════════════════════════════════════════════════
+    # PHASE 2: Fine-tune last layers (remaining epochs)
+    # ═══════════════════════════════════════════════════════
+
+    print(f"\n{'=' * 60}")
+    print(f"PHASE 2: Fine-tuning last layers for remaining epochs")
+    print(f"   Backbone lr: 1e-5 | Head lr: 1e-4")
+    print(f"{'=' * 60}")
+
+    # Unfreeze last layers based on model name
+    if model_name == "resnet152":
+        for param in model.layer4.parameters():
+            param.requires_grad = True
+    elif model_name == "efficientnet_b2":
+        for param in model.features[-3:].parameters():
+            param.requires_grad = True
+    elif model_name == "xception":
+        for param in model.blocks[-2:].parameters():
+            param.requires_grad = True
+
+    # Use different learning rates for backbone vs head
+    head_params = get_trainable_params(get_model_head(model, model_name))
+    backbone_params = [
+        p for name, p in model.named_parameters()
+        if p.requires_grad and "fc" not in name and "classifier" not in name
+    ]
+
+    optimizer_phase2 = Adam([
+        {"params": backbone_params, "lr": 1e-5},
+        {"params": head_params, "lr": 1e-4},
+    ], weight_decay=1e-4)
+
+    # Add ReduceLROnPlateau scheduler
+    scheduler = ReduceLROnPlateau(
+        optimizer_phase2,
+        mode="max",
+        factor=0.5,
+        patience=3,
+        min_lr=1e-7,
+        verbose=True
+    )
+
+    for epoch in range(PHASE1_EPOCHS + 1, config.EPOCHS + 1):
+        # Training phase
+        avg_train_loss, train_accuracy = _train_epoch(
+            model, train_loader, criterion, optimizer_phase2, device
+        )
+
+        # Validation phase
+        val_loss, val_accuracy, val_auc = validate(model, val_loader, criterion, device)
+
+        # Step the scheduler based on val_auc
+        scheduler.step(val_auc)
+        current_lr = optimizer_phase2.param_groups[0]["lr"]
+
+        # Store history
+        history["train_loss"].append(avg_train_loss)
+        history["train_accuracy"].append(train_accuracy)
+        history["val_loss"].append(val_loss)
+        history["val_accuracy"].append(val_accuracy)
+        history["val_auc"].append(val_auc)
+
+        # Log metrics to MLflow
+        mlflow.log_metric("train_loss", avg_train_loss, step=epoch)
+        mlflow.log_metric("train_accuracy", train_accuracy, step=epoch)
+        mlflow.log_metric("val_loss", val_loss, step=epoch)
+        mlflow.log_metric("val_accuracy", val_accuracy, step=epoch)
+        mlflow.log_metric("val_auc", val_auc, step=epoch)
+        mlflow.log_metric("learning_rate", current_lr, step=epoch)
+        mlflow.log_metric("phase", 2, step=epoch)
+
+        # Track best AUC
+        if val_auc > best_auc:
+            best_auc = val_auc
+
+        actual_epochs_run = epoch
+
+        # Print epoch results
+        print(
+            f"Epoch {epoch}/{config.EPOCHS} (Phase 2) - "
+            f"Train Loss: {avg_train_loss:.4f}, "
+            f"Val Loss: {val_loss:.4f}, "
+            f"Val Acc: {val_accuracy:.2f}%, "
+            f"Val AUC: {val_auc:.4f}, "
+            f"LR: {current_lr:.2e}"
+        )
 
         # Early stopping check
         if early_stopping.step(val_auc, model, model_name):

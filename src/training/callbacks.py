@@ -17,11 +17,12 @@ class EarlyStopping:
     """Monitor a metric and stop training if no improvement after patience epochs.
 
     Saves model checkpoints when the monitored metric improves. Supports both
-    minimization (e.g., loss) and maximization (e.g., accuracy) modes.
+    minimization (e.g., loss) and maximization (e.g., AUC-ROC) modes.
 
     Attributes:
         patience: Number of epochs to wait for improvement before stopping.
         mode: Whether to minimize or maximize the monitored metric.
+        monitor: Name of the metric being monitored (e.g., "val_auc").
         save_path: Directory path where checkpoint files are saved.
         counter: Current count of epochs without improvement.
         best_score: Best metric value seen so far.
@@ -31,6 +32,7 @@ class EarlyStopping:
         self,
         patience: int,
         mode: Literal["min", "max"] = "min",
+        monitor: str = "val_metric",
         save_path: str = "outputs/models",
     ) -> None:
         """Initialize the EarlyStopping callback.
@@ -38,7 +40,8 @@ class EarlyStopping:
         Args:
             patience: Number of epochs to wait for improvement before stopping.
             mode: Direction of improvement - "min" for metrics to minimize
-                (e.g., loss), "max" for metrics to maximize (e.g., accuracy).
+                (e.g., loss), "max" for metrics to maximize (e.g., val_auc).
+            monitor: Name of the metric to monitor (e.g., "val_auc", "val_loss").
             save_path: Directory path for saving model checkpoints.
 
         Raises:
@@ -53,6 +56,7 @@ class EarlyStopping:
 
         self.patience = patience
         self.mode = mode
+        self.monitor = monitor
         self.save_path = Path(save_path)
         self.counter = 0
         self.best_score: float | None = None
@@ -122,4 +126,4 @@ class EarlyStopping:
         self.save_path.mkdir(parents=True, exist_ok=True)
         checkpoint_path = self.save_path / f"{model_name}_best.pth"
         torch.save(model.state_dict(), checkpoint_path)
-        print(f"EarlyStopping: Saved new best model to {checkpoint_path}")
+        print(f"EarlyStopping ({self.monitor}): Saved new best model to {checkpoint_path}")
