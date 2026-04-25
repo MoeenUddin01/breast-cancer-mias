@@ -826,7 +826,7 @@ def save_model_report(model_name, model, history,
 # ═══════════════════════════════════════════════════════
 
 # MANUAL STEP: Set TRAIN_RESNET = True to run this cell
-TRAIN_RESNET = False
+TRAIN_RESNET = True
 
 if TRAIN_RESNET:
     print("\n" + "=" * 60)
@@ -860,7 +860,7 @@ else:
 # ═══════════════════════════════════════════════════════
 
 # MANUAL STEP: Set TRAIN_EFFICIENTNET = True after ResNet completes
-TRAIN_EFFICIENTNET = True
+TRAIN_EFFICIENTNET = False
 
 if TRAIN_EFFICIENTNET:
     print("\n" + "=" * 60)

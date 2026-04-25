@@ -1,0 +1,32 @@
+============================================================
+  BREAST CANCER DETECTION — MODEL COMPARISON
+============================================================
+  Date         : 2026-04-25 18:26
+  Dataset      : BreakHis All Magnifications
+  Total images : 7,909
+  Patients     : 324
+  Split        : 85% train / 15% test by patient ID
+  GPU          : Tesla T4
+============================================================
+
+  MODEL RESULTS:
+  ──────────────────────────────────────────────────────────
+  Model                  AUC     Acc%      F1    Prec  Recall    Time
+  ──────────────────────────────────────────────────────────
+  ResNet152           0.9780   94.04  0.9571  0.9465  0.9678   25.3m
+  EfficientNetB2      0.9862   94.93  0.9629  0.9538  0.9721   12.3m ← BEST
+  Xception            0.8827   78.18  0.8259  0.8012  0.8518   12.0m
+  ──────────────────────────────────────────────────────────
+
+  BEST MODEL  : EfficientNetB2
+  Best AUC    : 0.9862
+  Best Acc    : 94.93%
+  Best F1     : 0.9629
+  Train Time  : 12.3 minutes
+
+  RECOMMENDATION:
+  Deploy EfficientNetB2 — highest AUC
+  performance on the BreakHis breast cancer dataset.
+============================================================
+  ⚠️  Research prototype. Not for clinical use.
+============================================================
