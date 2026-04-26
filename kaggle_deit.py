@@ -80,7 +80,19 @@ def main() -> None:
         raise FileNotFoundError(f"Missing training script: {train_script}")
 
     print("🚀 Starting DeiT training script...")
-    subprocess.run([sys.executable, str(train_script)], check=True)
+    try:
+        subprocess.run([sys.executable, str(train_script)], check=True)
+    except subprocess.CalledProcessError as exc:
+        if exc.returncode in (-9, 137):
+            print(
+                "❌ Training process was killed (SIGKILL), likely due to memory limits.\n"
+                "Try this before rerun:\n"
+                "  1) Keep offline augmentation disabled (default)\n"
+                "  2) Lower batch size: os.environ['DEIT_BATCH_SIZE_OVERRIDE']='4'\n"
+                "  3) Restart runtime and rerun one training command"
+            )
+            return
+        raise
     _ = lock_file  # Keep handle alive for full process lifetime.
 
 

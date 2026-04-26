@@ -45,10 +45,12 @@ PLOTS_DIR = "/kaggle/working/outputs/plots/"
 REPORTS_DIR = "/kaggle/working/outputs/reports/"
 SEED = 42
 TEST_SIZE = 0.15
-NUM_WORKERS = 2
+NUM_WORKERS = 0
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 IMAGE_SIZE = DEIT_IMAGE_SIZE
 QUIET_TQDM = True
+ENABLE_OFFLINE_AUG = os.environ.get("DEIT_ENABLE_OFFLINE_AUG", "false").lower() == "true"
+BATCH_SIZE = int(os.environ.get("DEIT_BATCH_SIZE_OVERRIDE", str(DEIT_BATCH_SIZE)))
 
 os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(PLOTS_DIR, exist_ok=True)
@@ -60,6 +62,8 @@ print("  BreakHis Breast Cancer Detection")
 print("=" * 60)
 print(f"  Device : {DEVICE}")
 print(f"  Dataset: {DATA_DIR}")
+print(f"  Batch  : {BATCH_SIZE}")
+print(f"  Offline Augmentation : {'ON (5x)' if ENABLE_OFFLINE_AUG else 'OFF'}")
 
 # SECTION 3 - Seed
 random.seed(SEED)
@@ -144,7 +148,10 @@ def augment_for_deit(train_data: list) -> list:
     return augmented
 
 
-train_data = augment_for_deit(train_data)
+if ENABLE_OFFLINE_AUG:
+    train_data = augment_for_deit(train_data)
+else:
+    print("✓ Offline augmentation skipped (set DEIT_ENABLE_OFFLINE_AUG=true to enable)")
 
 # SECTION 9 - Datasets and DataLoaders
 # DeiT-specific stronger transforms
@@ -200,14 +207,14 @@ sampler = WeightedRandomSampler(
 
 deit_train_loader = DataLoader(
     train_dataset,
-    batch_size=DEIT_BATCH_SIZE,
+    batch_size=BATCH_SIZE,
     sampler=sampler,
     num_workers=NUM_WORKERS,
     drop_last=True,
 )
 deit_test_loader = DataLoader(
     test_dataset,
-    batch_size=DEIT_BATCH_SIZE,
+    batch_size=BATCH_SIZE,
     shuffle=False,
     num_workers=NUM_WORKERS,
 )
@@ -230,9 +237,9 @@ with mlflow.start_run(run_name="deit_b_distilled"):
         "dataset": "BreakHis_AllMagnifications",
         "train_samples": len(train_data),
         "test_samples": len(test_data),
-        "batch_size": DEIT_BATCH_SIZE,
+        "batch_size": BATCH_SIZE,
         "grad_accumulation": DEIT_ACCUMULATION_STEPS,
-        "effective_batch": DEIT_BATCH_SIZE * DEIT_ACCUMULATION_STEPS,
+        "effective_batch": BATCH_SIZE * DEIT_ACCUMULATION_STEPS,
         "architecture": "DeiT-Distilled-Transformer",
         "image_size": DEIT_IMAGE_SIZE[0],
         "phase1_epochs": DEIT_PHASE1_EPOCHS,
@@ -241,7 +248,7 @@ with mlflow.start_run(run_name="deit_b_distilled"):
         "scheduler_p2": "CosineAnnealingWarmRestarts",
         "label_smoothing": 0.05,
         "drop_path_rate": DEIT_DROP_PATH_RATE,
-        "offline_aug": "5x_hflip_vflip_rot90_rot270",
+        "offline_aug": "disabled" if not ENABLE_OFFLINE_AUG else "5x_hflip_vflip_rot90_rot270",
     })
 
     deit_history, deit_best_epoch, deit_train_time = train_deit(
