@@ -16,6 +16,7 @@ import torch
 import dagshub
 import mlflow
 import cv2
+import psutil
 from kaggle_secrets import UserSecretsClient
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from tqdm import tqdm
@@ -25,7 +26,6 @@ sys.path.insert(0, "/kaggle/working/breast-cancer-mias")
 
 from src.data.loader import load_data
 from src.data.splitter import split_by_patient_id
-from src.data.preprocessor import apply_clahe
 from src.data.dataset import MIASDataset
 from src.transformers.deit_model import get_deit_model
 from src.transformers.deit_trainer import train_deit
@@ -152,19 +152,7 @@ print("\n⏳ Splitting by patient ID...")
 train_data, test_data = split_by_patient_id(data, TEST_SIZE, SEED)
 print(f"✓ Train: {len(train_data)} | Test: {len(test_data)}")
 
-# SECTION 7 - CLAHE
-print("\n⏳ Applying CLAHE...")
-train_data = [
-    (pid, apply_clahe(img), label)
-    for pid, img, label in tqdm(train_data, desc="CLAHE train", disable=QUIET_TQDM)
-]
-test_data = [
-    (pid, apply_clahe(img), label)
-    for pid, img, label in tqdm(test_data, desc="CLAHE test", disable=QUIET_TQDM)
-]
-print("✓ CLAHE preprocessing complete")
-
-# SECTION 8 - Offline augmentation (7× expansion)
+# SECTION 7 - Offline augmentation (5× expansion)
 def augment_stain(img: np.ndarray) -> np.ndarray:
     """Apply random per-channel stain perturbation."""
     img_float = img.astype(np.float32) / 255.0
@@ -175,13 +163,13 @@ def augment_stain(img: np.ndarray) -> np.ndarray:
 
 
 def augment_for_deit(train_data: list) -> list:
-    """Apply offline augmentation for DeiT training (7× expansion).
+    """Apply offline augmentation for DeiT training (5× expansion).
 
     Args:
         train_data: List of (patient_id, image, label) tuples.
 
     Returns:
-        Augmented list with original + 6 transformed copies per sample.
+        Augmented list with original + 4 transformed copies per sample.
 
     """
     augmented = list(train_data)
@@ -192,32 +180,25 @@ def augment_for_deit(train_data: list) -> list:
     ):
         augmented.append((f"{pid}_hf", cv2.flip(img, 1), label))
         augmented.append((f"{pid}_vf", cv2.flip(img, 0), label))
-        augmented.append((
-            f"{pid}_r90",
-            cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE),
-            label,
-        ))
-        augmented.append((
-            f"{pid}_r270",
-            cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE),
-            label,
-        ))
         augmented.append((f"{pid}_stain1", augment_stain(img), label))
         augmented.append((f"{pid}_stain2", augment_stain(img), label))
-    print(f"✓ {len(train_data)} → {len(augmented)} samples (7× expansion)")
+    print(f"✓ {len(train_data)} → {len(augmented)} samples (5× expansion)")
     return augmented
 
 
+ram_before = psutil.virtual_memory().used / 1e9
+print(f"RAM before aug: {ram_before:.1f} GB")
 train_data = augment_for_deit(train_data)
-import psutil
-ram_gb = psutil.virtual_memory().used / 1e9
-print(f"✓ RAM used: {ram_gb:.1f} GB / 16 GB")
-if ram_gb > 12:
-    print("⚠️ High RAM warning")
-else:
-    print("✅ RAM usage safe")
+ram_after = psutil.virtual_memory().used / 1e9
+print(f"RAM after aug : {ram_after:.1f} GB")
 
-# SECTION 9 - Datasets and DataLoaders
+if ram_after > 12:
+    print("⚠️ CRITICAL: RAM too high — stopping")
+    raise MemoryError("Insufficient RAM for augmentation")
+else:
+    print("✅ RAM safe")
+
+# SECTION 8 - Datasets and DataLoaders
 # DeiT-specific stronger transforms
 deit_train_transforms = T.Compose([
     T.Resize(DEIT_IMAGE_SIZE),
@@ -317,7 +298,7 @@ with mlflow.start_run(run_name="deit_b_distilled"):
         "scheduler_p2": "CosineAnnealingWarmRestarts",
         "label_smoothing": 0.05,
         "drop_path_rate": DEIT_DROP_PATH_RATE,
-        "offline_aug": "5x_hflip_vflip_rot90_rot270",
+        "offline_aug": "5x_hflip_vflip_stain1_stain2",
     })
 
     deit_history, deit_best_epoch, deit_train_time = train_deit(
@@ -328,7 +309,7 @@ with mlflow.start_run(run_name="deit_b_distilled"):
         device=DEVICE,
     )
 
-# SECTION 12 - Evaluation and report
+# SECTION 11 - Evaluation and report
 from sklearn.metrics import (
     accuracy_score,
     classification_report,

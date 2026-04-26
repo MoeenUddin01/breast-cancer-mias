@@ -94,7 +94,12 @@ class MIASDataset(Dataset):
             raise
 
         try:
-            # Apply preprocessing (CLAHE, 3-channel conversion, resize, normalize)
+            # Apply CLAHE lazily at sample access time to reduce peak RAM.
+            from src.data.preprocessor import apply_clahe
+
+            image_array = apply_clahe(image_array)
+
+            # Apply remaining preprocessing (3-channel conversion, resize, normalize)
             processed = preprocess_image(image_array, self.image_size)
         except Exception as e:
             print(f"[ERROR] Preprocessing failed for image {image_id} at index {idx}: {e}")
