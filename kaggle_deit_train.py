@@ -146,13 +146,21 @@ except Exception as e:
 print("\n⏳ Loading BreakHis dataset...")
 data = load_data(DATA_DIR)
 print(f"✓ Total samples: {len(data)}")
+ram = psutil.virtual_memory().used / 1e9
+print(f"RAM after load_data()    : {ram:.1f} GB")
 
 # SECTION 6 - Split by patient
 print("\n⏳ Splitting by patient ID...")
 train_data, test_data = split_by_patient_id(data, TEST_SIZE, SEED)
 print(f"✓ Train: {len(train_data)} | Test: {len(test_data)}")
+ram = psutil.virtual_memory().used / 1e9
+print(f"RAM after split()        : {ram:.1f} GB")
 
 # SECTION 7 - Offline augmentation (5× expansion)
+aug_dir = "/kaggle/working/aug_cache/"
+os.makedirs(aug_dir, exist_ok=True)
+
+
 def augment_stain(img: np.ndarray) -> np.ndarray:
     """Apply random per-channel stain perturbation."""
     img_float = img.astype(np.float32) / 255.0
@@ -162,32 +170,47 @@ def augment_stain(img: np.ndarray) -> np.ndarray:
     return np.clip(img_float * 255, 0, 255).astype(np.uint8)
 
 
-def augment_for_deit(train_data: list) -> list:
+def augment_for_deit(train_data_paths: list[tuple[str, str, int]]) -> list[tuple[str, str, int]]:
     """Apply offline augmentation for DeiT training (5× expansion).
 
     Args:
-        train_data: List of (patient_id, image, label) tuples.
+        train_data_paths: List of (patient_id, image_path, label) tuples.
 
     Returns:
         Augmented list with original + 4 transformed copies per sample.
 
     """
-    augmented = list(train_data)
-    for pid, img, label in tqdm(
-        train_data,
+    augmented_paths = list(train_data_paths)
+    for idx, (pid, image_path, label) in enumerate(tqdm(
+        train_data_paths,
         desc="Augmenting for DeiT",
         disable=QUIET_TQDM,
-    ):
-        augmented.append((f"{pid}_hf", cv2.flip(img, 1), label))
-        augmented.append((f"{pid}_vf", cv2.flip(img, 0), label))
-        augmented.append((f"{pid}_stain1", augment_stain(img), label))
-        augmented.append((f"{pid}_stain2", augment_stain(img), label))
-    print(f"✓ {len(train_data)} → {len(augmented)} samples (5× expansion)")
-    return augmented
+    ), start=1):
+        img = cv2.imread(image_path)
+        if img is None:
+            print(f"[WARNING] Failed to load image for augmentation: {image_path}")
+            continue
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        augs = {
+            "hf": cv2.flip(img, 1),
+            "vf": cv2.flip(img, 0),
+            "stain1": augment_stain(img),
+            "stain2": augment_stain(img),
+        }
+
+        for suffix, aug_img in augs.items():
+            aug_path = os.path.join(aug_dir, f"{pid}_{idx}_{suffix}.png")
+            cv2.imwrite(aug_path, cv2.cvtColor(aug_img, cv2.COLOR_RGB2BGR))
+            augmented_paths.append((f"{pid}_{suffix}", aug_path, label))
+
+    print(f"✓ {len(train_data_paths)} → {len(augmented_paths)} samples (5× expansion)")
+    return augmented_paths
 
 
-ram_before = psutil.virtual_memory().used / 1e9
-print(f"RAM before aug: {ram_before:.1f} GB")
+ram = psutil.virtual_memory().used / 1e9
+print(f"RAM before augmentation  : {ram:.1f} GB")
+ram_before = ram
 train_data = augment_for_deit(train_data)
 ram_after = psutil.virtual_memory().used / 1e9
 print(f"RAM after aug : {ram_after:.1f} GB")

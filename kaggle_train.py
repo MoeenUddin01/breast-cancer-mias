@@ -126,6 +126,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import mlflow
 import numpy as np
+import psutil
 import seaborn as sns
 import torch
 import torch.nn as nn
@@ -141,7 +142,6 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 from src.data.augmentor import augment_training_data, get_test_transforms, get_train_transforms
 from src.data.dataset import MIASDataset
 from src.data.loader import load_data
-from src.data.preprocessor import apply_clahe
 from src.data.splitter import split_by_patient_id
 
 # Model imports
@@ -279,6 +279,8 @@ print(f"✓ MLflow tracking URI: {mlflow.get_tracking_uri()}")
 
 # Load the dataset with all magnifications
 data = load_data(DATA_DIR, magnifications=MAGNIFICATIONS)
+ram = psutil.virtual_memory().used / 1e9
+print(f"RAM after load_data()    : {ram:.1f} GB")
 
 # Count classes and patients
 benign_count = sum(1 for _, _, label in data if label == 0)
@@ -295,14 +297,18 @@ print(f"Unique patients: {unique_patients}")
 preview_samples = []
 for mag in MAGNIFICATIONS:
     # Find one benign and one malignant sample for this magnification
-    benign_sample = next((pid, img, lbl) for pid, img, lbl in data if lbl == 0 and mag in pid)
-    malignant_sample = next((pid, img, lbl) for pid, img, lbl in data if lbl == 1 and mag in pid)
+    benign_sample = next((pid, path, lbl) for pid, path, lbl in data if lbl == 0 and mag in pid)
+    malignant_sample = next((pid, path, lbl) for pid, path, lbl in data if lbl == 1 and mag in pid)
     preview_samples.extend([benign_sample, malignant_sample])
 
 fig, axes = plt.subplots(2, 4, figsize=(16, 8))
-for i, (patient_id, image_array, label) in enumerate(preview_samples):
+for i, (patient_id, image_path, label) in enumerate(preview_samples):
     row = i % 2  # Row 0 = benign, Row 1 = malignant
     col = i // 2  # Columns 0-3 = 40X, 100X, 200X, 400X
+    image_array = cv2.imread(image_path)
+    if image_array is None:
+        raise FileNotFoundError(f"Preview image not found: {image_path}")
+    image_array = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
     axes[row, col].imshow(image_array)
     mag_label = MAGNIFICATIONS[col]
     label_name = "Benign" if label == 0 else "Malignant"
@@ -319,6 +325,8 @@ print(f"✓ Preview saved to {PLOTS_DIR}/data_preview.png")
 
 # Split by patient ID with stratification to prevent data leakage
 train_data, test_data = split_by_patient_id(data, TEST_SIZE, SEED)
+ram = psutil.virtual_memory().used / 1e9
+print(f"RAM after split()        : {ram:.1f} GB")
 
 print(f"\nTrain size: {len(train_data)}")
 print(f"Test size: {len(test_data)}")
@@ -353,38 +361,25 @@ print(f"Unique patients in test: {len(test_patient_ids)}")
 # CELL 8: Preprocessing and DataLoaders
 # ═══════════════════════════════════════════════════════
 
-# Step 1: Apply CLAHE to training images (no offline augmentation, using online aug)
-print("Applying CLAHE to training images...")
-train_data_processed = [
-    (img_id, apply_clahe(img_array), label)
-    for img_id, img_array, label in train_data
-]
-
-print("Applying CLAHE to test images...")
-test_data_processed = [
-    (img_id, apply_clahe(img_array), label)
-    for img_id, img_array, label in test_data
-]
-
 # Get transforms
 train_transforms = get_train_transforms(IMAGE_SIZE)
 test_transforms = get_test_transforms(IMAGE_SIZE)
 
 # Create datasets
 train_dataset = MIASDataset(
-    data=train_data_processed,
+    data=train_data,
     transform=train_transforms,
     image_size=IMAGE_SIZE,
 )
 test_dataset = MIASDataset(
-    data=test_data_processed,
+    data=test_data,
     transform=test_transforms,
     image_size=IMAGE_SIZE,
 )
 
 # Create DataLoaders with WeightedRandomSampler for class imbalance
 # Count classes in training data for weighted sampling
-train_labels = [item[2] for item in train_data_processed]
+train_labels = [item[2] for item in train_data]
 class_counts = torch.bincount(torch.tensor(train_labels))
 class_weights = 1.0 / class_counts.float()
 sample_weights = [class_weights[label] for label in train_labels]

@@ -7,15 +7,14 @@ images, so splitting by image ID would leak patient data.
 
 from __future__ import annotations
 
-import numpy as np
 from sklearn.model_selection import train_test_split
 
 
 def split_by_patient_id(
-    data: list[tuple[str, np.ndarray, int]],
+    data: list[tuple[str, str, int]],
     test_size: float,
     seed: int,
-) -> tuple[list[tuple[str, np.ndarray, int]], list[tuple[str, np.ndarray, int]]]:
+) -> tuple[list[tuple[str, str, int]], list[tuple[str, str, int]]]:
     """Split data by unique patient IDs with stratification.
 
     Performs a stratified train/test split at the patient ID level to
@@ -23,7 +22,7 @@ def split_by_patient_id(
     This prevents data leakage since one patient has multiple images.
 
     Args:
-        data: List of (patient_id, image_array, label) tuples from loader.py.
+        data: List of (patient_id, image_path, label) tuples from loader.py.
         test_size: Fraction of patients to use for the test set (0.0 to 1.0).
         seed: Random seed for reproducibility, passed to train_test_split
             as random_state.
@@ -31,7 +30,7 @@ def split_by_patient_id(
     Returns:
         Tuple containing:
             - train_data: List of (patient_id, image_array, label) for training.
-            - test_data: List of (patient_id, image_array, label) for testing.
+            - test_data: List of (patient_id, image_path, label) for testing.
 
     Raises:
         ValueError: If data is empty or if split results in leakage.
@@ -43,16 +42,16 @@ def split_by_patient_id(
     try:
         # Group images by base patient_id (without magnification suffix)
         # to ensure all magnifications of same patient stay together
-        patient_images: dict[str, list[tuple[str, np.ndarray, int]]] = {}
+        patient_images: dict[str, list[tuple[str, str, int]]] = {}
         patient_labels: dict[str, int] = {}
 
-        for patient_id, image_array, label in data:
+        for patient_id, image_path, label in data:
             # Extract base patient ID (e.g., "14-4659" from "14-4659_400X")
             base_patient_id = patient_id.split("_")[0]
             if base_patient_id not in patient_images:
                 patient_images[base_patient_id] = []
                 patient_labels[base_patient_id] = label
-            patient_images[base_patient_id].append((patient_id, image_array, label))
+            patient_images[base_patient_id].append((patient_id, image_path, label))
 
         unique_patients = list(patient_images.keys())
         patient_label_list = [patient_labels[pid] for pid in unique_patients]
@@ -88,8 +87,8 @@ def split_by_patient_id(
             raise ValueError(f"Data leakage detected: {overlap} appear in both sets")
 
         # Collect all images for train and test patients
-        train_data: list[tuple[str, np.ndarray, int]] = []
-        test_data: list[tuple[str, np.ndarray, int]] = []
+        train_data: list[tuple[str, str, int]] = []
+        test_data: list[tuple[str, str, int]] = []
 
         for patient_id in train_patients:
             train_data.extend(patient_images[patient_id])

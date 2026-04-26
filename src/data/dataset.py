@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+import cv2
 import numpy as np
 import torch
 from PIL import Image
@@ -31,7 +32,7 @@ class MIASDataset(Dataset):
 
     def __init__(
         self,
-        data: list[tuple[str, np.ndarray, int]],
+        data: list[tuple[str, str | np.ndarray, int]],
         transform: Callable,
         image_size: tuple[int, int],
     ) -> None:
@@ -88,15 +89,23 @@ class MIASDataset(Dataset):
             raise IndexError(f"Index {idx} out of range for dataset of size {len(self)}")
 
         try:
-            image_id, image_array, label = self.data[idx]
+            image_id, image_source, label = self.data[idx]
         except Exception as e:
             print(f"[ERROR] Failed to retrieve data at index {idx}: {e}")
             raise
 
         try:
-            # Apply CLAHE lazily at sample access time to reduce peak RAM.
             from src.data.preprocessor import apply_clahe
 
+            if isinstance(image_source, str):
+                image_array = cv2.imread(image_source)
+                if image_array is None:
+                    raise FileNotFoundError(f"Image not found: {image_source}")
+                image_array = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
+            else:
+                image_array = image_source
+
+            # Apply CLAHE lazily at sample access time to reduce peak RAM.
             image_array = apply_clahe(image_array)
 
             # Apply remaining preprocessing (3-channel conversion, resize, normalize)

@@ -8,9 +8,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import cv2
-import numpy as np
-
 from src.utils import config
 
 
@@ -36,7 +33,7 @@ def _extract_patient_id(filename: str) -> str:
 def load_data(
     data_dir: str | None = None,
     magnifications: list[str] | None = None,
-) -> list[tuple[str, np.ndarray, int]]:
+) -> list[tuple[str, str, int]]:
     """Load BreakHis dataset from directory structure.
 
     Walks through data_dir/benign/SOB/ and data_dir/malignant/SOB/
@@ -54,7 +51,7 @@ def load_data(
         List of tuples containing:
             - patient_id (str): Extracted patient ID with magnification suffix
                 (e.g., "14-4659_400X")
-            - image_array (np.ndarray): RGB image loaded with OpenCV
+            - image_path (str): Image path for lazy loading later
             - label (int): Binary label (0 for benign, 1 for malignant)
 
     Raises:
@@ -72,7 +69,7 @@ def load_data(
     if not data_path.exists():
         raise FileNotFoundError(f"Data directory not found: {data_path}")
 
-    data: list[tuple[str, np.ndarray, int]] = []
+    data: list[tuple[str, str, int]] = []
     mag_counts: dict[str, dict[str, int]] = {
         mag: {"benign": 0, "malignant": 0} for mag in magnifications
     }
@@ -85,14 +82,9 @@ def load_data(
             for mag in magnifications:
                 if mag in str(image_file.parent):
                     try:
-                        img = cv2.imread(str(image_file))
-                        if img is None:
-                            print(f"[WARNING] Failed to load image: {image_file}")
-                            continue
-                        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                         base_patient_id = _extract_patient_id(image_file.name)
                         patient_id = f"{base_patient_id}_{mag}"
-                        data.append((patient_id, img, 0))
+                        data.append((patient_id, str(image_file), 0))
                         base_patient_ids.add(base_patient_id)
                         mag_counts[mag]["benign"] += 1
                     except Exception as e:
@@ -106,14 +98,9 @@ def load_data(
             for mag in magnifications:
                 if mag in str(image_file.parent):
                     try:
-                        img = cv2.imread(str(image_file))
-                        if img is None:
-                            print(f"[WARNING] Failed to load image: {image_file}")
-                            continue
-                        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                         base_patient_id = _extract_patient_id(image_file.name)
                         patient_id = f"{base_patient_id}_{mag}"
-                        data.append((patient_id, img, 1))
+                        data.append((patient_id, str(image_file), 1))
                         base_patient_ids.add(base_patient_id)
                         mag_counts[mag]["malignant"] += 1
                     except Exception as e:
