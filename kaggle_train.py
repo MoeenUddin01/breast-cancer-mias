@@ -12,7 +12,7 @@ Prerequisites: pip install torch torchvision timm mlflow dagshub scikit-learn op
 # ═══════════════════════════════════════════════════════
 # CELL 1: Install dependencies (run manually in Kaggle first)
 # ═══════════════════════════════════════════════════════
-# !pip install -q torch torchvision timm mlflow dagshub scikit-learn opencv-python tqdm matplotlib seaborn
+# !pip install -q torch torchvision timm mlflow dagshub scikit-learn opencv-python matplotlib seaborn
 
 # ═══════════════════════════════════════════════════════
 # CELL 2: Load secrets, clone repo, setup paths
@@ -136,7 +136,6 @@ from sklearn.metrics import (
 )
 from torch.optim import Adam
 from torch.utils.data import DataLoader, WeightedRandomSampler
-from tqdm import tqdm
 
 # Data imports
 from src.data.augmentor import augment_training_data, get_test_transforms, get_train_transforms
@@ -191,6 +190,12 @@ BATCH_SIZE = 32
 LEARNING_RATE = 1e-4
 PATIENCE = 6
 SEED = dagshub_config.SEED
+
+# Model training flags
+TRAIN_VIT = False  # set True when ready
+TRAIN_RESNET = False
+TRAIN_EFFICIENTNET = False
+TRAIN_XCEPTION = False
 
 # Other constants
 TEST_SIZE = dagshub_config.TEST_SIZE
@@ -328,13 +333,13 @@ print(f"Unique patients in test: {len(test_patient_ids)}")
 print("Applying CLAHE to training images...")
 train_data_processed = [
     (img_id, apply_clahe(img_array), label)
-    for img_id, img_array, label in tqdm(train_data, desc="CLAHE train")
+    for img_id, img_array, label in train_data
 ]
 
 print("Applying CLAHE to test images...")
 test_data_processed = [
     (img_id, apply_clahe(img_array), label)
-    for img_id, img_array, label in tqdm(test_data, desc="CLAHE test")
+    for img_id, img_array, label in test_data
 ]
 
 # Get transforms
@@ -512,9 +517,7 @@ def verbose_train(
         train_total = 0
         batch_times = []
 
-        pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f"Epoch {epoch}")
-
-        for batch_idx, (images, labels) in pbar:
+        for batch_idx, (images, labels) in enumerate(train_loader):
             batch_start = time.time()
 
             images = images.to(DEVICE)
@@ -536,18 +539,13 @@ def verbose_train(
             batch_time = time.time() - batch_start
             batch_times.append(batch_time)
 
-            # Update progress bar
+            # Calculate timing for custom progress bar
             avg_batch_time = sum(batch_times) / len(batch_times)
             elapsed = batch_idx * avg_batch_time
             remaining = (len(train_loader) - batch_idx) * avg_batch_time
 
-            pbar.set_postfix({
-                "loss": f"{loss.item():.4f}",
-                "acc": f"{100.0 * train_correct / train_total:.2f}%",
-            })
-
-            # Print detailed progress every 10 batches
-            if (batch_idx + 1) % 10 == 0 or batch_idx == len(train_loader) - 1:
+            # Print detailed progress every 50 batches
+            if (batch_idx + 1) % 50 == 0 or batch_idx == len(train_loader) - 1:
                 progress = 100.0 * (batch_idx + 1) / len(train_loader)
                 bar_len = 20
                 filled = int(bar_len * (batch_idx + 1) / len(train_loader))
@@ -922,6 +920,69 @@ if TRAIN_XCEPTION:
     )
 else:
     print("Xception training skipped (set TRAIN_XCEPTION = True to enable)")
+
+# ═══════════════════════════════════════════════════════
+# CELL 13b: Train ViT-B/16
+# ═══════════════════════════════════════════════════════
+
+if TRAIN_VIT:
+    from src.transformers.vit_model import get_vit_model
+    from src.transformers.vit_trainer import train_vit
+    from src.transformers.vit_config import VIT_BATCH_SIZE
+
+    # ViT needs batch_size=16 (more RAM than CNN)
+    vit_train_loader = DataLoader(
+        train_dataset, batch_size=VIT_BATCH_SIZE,
+        sampler=sampler, num_workers=NUM_WORKERS,
+        drop_last=True
+    )
+    vit_test_loader = DataLoader(
+        test_dataset, batch_size=VIT_BATCH_SIZE,
+        shuffle=False, num_workers=NUM_WORKERS
+    )
+
+    print("=" * 60)
+    print("  Training ViT-B/16 (ImageNet-21k pretrained)")
+    print("=" * 60)
+
+    vit_model = get_vit_model().to(DEVICE)
+
+    with mlflow.start_run(run_name="vit_b16"):
+        mlflow.log_params({
+            "model"              : "vit_base_patch16_224_in21k",
+            "pretrained_on"      : "ImageNet-21k",
+            "batch_size"         : VIT_BATCH_SIZE,
+            "architecture"       : "Transformer",
+            "phase1_epochs"      : 5,
+            "unfreeze_blocks"    : 4,
+            "scheduler"          : "CosineAnnealingWarmRestarts",
+            "optimizer"          : "AdamW",
+            "loss"               : "BCEWithLogitsLoss"
+        })
+
+        vit_history, vit_best_epoch, vit_train_time = train_vit(
+            model=vit_model,
+            train_loader=vit_train_loader,
+            val_loader=vit_test_loader,
+            model_name="vit",
+            device=DEVICE
+        )
+
+    vit_metrics = save_model_report(
+        model_name="vit",
+        model=vit_model,
+        history=vit_history,
+        best_epoch=vit_best_epoch,
+        train_time=vit_train_time,
+        test_loader=vit_test_loader,
+        device=DEVICE
+    )
+    print(f"✓ ViT-B/16 complete | "
+          f"AUC: {vit_metrics['auc']:.4f} | "
+          f"Acc: {vit_metrics['accuracy']*100:.2f}% | "
+          f"Time: {vit_train_time:.1f}min")
+else:
+    print("ViT-B/16 skipped (set TRAIN_VIT = True)")
 
 # ═══════════════════════════════════════════════════════
 # CELL 14: Evaluate all models
