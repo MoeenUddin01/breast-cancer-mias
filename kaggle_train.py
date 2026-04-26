@@ -865,9 +865,7 @@ def save_model_report(model_name, model, history,
 # CELL 11: Train ResNet152
 # ═══════════════════════════════════════════════════════
 
-# MANUAL STEP: Set TRAIN_RESNET = True to run this cell
-TRAIN_RESNET = True
-
+# Controlled by CONTROL CELL — os.environ["TRAIN_RESNET"]
 if TRAIN_RESNET:
     print("\n" + "=" * 60)
     print("Training ResNet152...")
@@ -899,9 +897,7 @@ else:
 # CELL 12: Train EfficientNetB2
 # ═══════════════════════════════════════════════════════
 
-# MANUAL STEP: Set TRAIN_EFFICIENTNET = True after ResNet completes
-TRAIN_EFFICIENTNET = False
-
+# Controlled by CONTROL CELL — os.environ["TRAIN_EFFICIENTNET"]
 if TRAIN_EFFICIENTNET:
     print("\n" + "=" * 60)
     print("Training EfficientNetB2...")
@@ -933,9 +929,7 @@ else:
 # CELL 13: Train Xception
 # ═══════════════════════════════════════════════════════
 
-# MANUAL STEP: Set TRAIN_XCEPTION = True after EfficientNet completes
-TRAIN_XCEPTION = False
-
+# Controlled by CONTROL CELL — os.environ["TRAIN_XCEPTION"]
 if TRAIN_XCEPTION:
     print("\n" + "=" * 60)
     print("Training Xception...")
