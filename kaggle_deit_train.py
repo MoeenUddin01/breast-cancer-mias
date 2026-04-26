@@ -28,8 +28,13 @@ from src.data.dataset import MIASDataset
 from src.transformers.deit_model import get_deit_model
 from src.transformers.deit_trainer import train_deit
 from src.transformers.deit_config import (
+    DEIT_MODEL_NAME,
     DEIT_BATCH_SIZE,
     DEIT_ACCUMULATION_STEPS,
+    DEIT_IMAGE_SIZE,
+    DEIT_PHASE1_EPOCHS,
+    DEIT_UNFREEZE_BLOCKS,
+    DEIT_DROP_PATH_RATE,
 )
 
 # SECTION 2 - Config
@@ -42,7 +47,7 @@ SEED = 42
 TEST_SIZE = 0.15
 NUM_WORKERS = 2
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-IMAGE_SIZE = (224, 224)
+IMAGE_SIZE = DEIT_IMAGE_SIZE
 
 os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(PLOTS_DIR, exist_ok=True)
@@ -138,7 +143,7 @@ train_data = augment_for_deit(train_data)
 # SECTION 9 - Datasets and DataLoaders
 # DeiT-specific stronger transforms
 deit_train_transforms = T.Compose([
-    T.Resize((224, 224)),
+    T.Resize(DEIT_IMAGE_SIZE),
     T.RandomHorizontalFlip(p=0.5),
     T.RandomVerticalFlip(p=0.5),
     T.RandomRotation(degrees=180),
@@ -165,7 +170,7 @@ deit_train_transforms = T.Compose([
 ])
 
 deit_test_transforms = T.Compose([
-    T.Resize((224, 224)),
+    T.Resize(DEIT_IMAGE_SIZE),
     T.ToTensor(),
     T.Normalize(
         mean=[0.485, 0.456, 0.406],
@@ -214,7 +219,7 @@ print("\n🚀 Starting DeiT-B Distilled training...")
 
 with mlflow.start_run(run_name="deit_b_distilled"):
     mlflow.log_params({
-        "model": "deit_base_distilled_patch16_224",
+        "model": DEIT_MODEL_NAME,
         "pretrained_on": "ImageNet-1k+distillation",
         "dataset": "BreakHis_AllMagnifications",
         "train_samples": len(train_data),
@@ -223,12 +228,13 @@ with mlflow.start_run(run_name="deit_b_distilled"):
         "grad_accumulation": DEIT_ACCUMULATION_STEPS,
         "effective_batch": DEIT_BATCH_SIZE * DEIT_ACCUMULATION_STEPS,
         "architecture": "DeiT-Distilled-Transformer",
-        "phase1_epochs": 8,
-        "unfreeze_blocks": 8,
+        "image_size": DEIT_IMAGE_SIZE[0],
+        "phase1_epochs": DEIT_PHASE1_EPOCHS,
+        "unfreeze_blocks": DEIT_UNFREEZE_BLOCKS,
         "scheduler_p1": "LinearWarmup",
         "scheduler_p2": "CosineAnnealingWarmRestarts",
         "label_smoothing": 0.05,
-        "drop_path_rate": 0.1,
+        "drop_path_rate": DEIT_DROP_PATH_RATE,
         "offline_aug": "5x_hflip_vflip_rot90_rot270",
     })
 
@@ -284,7 +290,7 @@ with open(txt_path, "w") as f:
     f.write("  DEIT-B DISTILLED RESULTS\n")
     f.write(f"{'=' * 50}\n")
     f.write(f"  Date        : {date_str}\n")
-    f.write("  Model       : deit_base_distilled_patch16_224\n")
+    f.write(f"  Model       : {DEIT_MODEL_NAME}\n")
     f.write("  Pretrained  : ImageNet-1k + distillation\n")
     f.write("  Dataset     : BreakHis All Magnifications\n")
     f.write(f"{'=' * 50}\n")

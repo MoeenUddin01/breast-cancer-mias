@@ -12,6 +12,7 @@ import torch.nn as nn
 
 from src.transformers.deit_config import (
     DEIT_DROP_PATH_RATE,
+    DEIT_IMAGE_SIZE,
     DEIT_IN_FEATURES,
     DEIT_MODEL_NAME,
     DEIT_PRETRAINED,
@@ -41,11 +42,12 @@ def get_deit_model() -> nn.Module:
         DEIT_MODEL_NAME,
         pretrained=DEIT_PRETRAINED,
         num_classes=0,
+        img_size=DEIT_IMAGE_SIZE[0],
         drop_path_rate=DEIT_DROP_PATH_RATE,
     )
 
     # Check actual output size
-    dummy = torch.zeros(1, 3, 224, 224)
+    dummy = torch.zeros(1, 3, DEIT_IMAGE_SIZE[0], DEIT_IMAGE_SIZE[1])
     with torch.no_grad():
         out = model(dummy)
     actual_features = out.shape[-1]

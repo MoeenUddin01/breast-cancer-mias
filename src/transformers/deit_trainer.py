@@ -334,6 +334,12 @@ def _train_epoch_ga(
                 flush=True,
             )
 
+    # Handle final partial accumulation window.
+    if total_batches % DEIT_ACCUMULATION_STEPS != 0:
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        optimizer.step()
+        optimizer.zero_grad()
+
     print()
     avg_loss = total_loss / total_batches
     accuracy = correct / total
