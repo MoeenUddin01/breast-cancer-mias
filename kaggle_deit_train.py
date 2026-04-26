@@ -164,15 +164,24 @@ test_data = [
 ]
 print("✓ CLAHE preprocessing complete")
 
-# SECTION 8 - Offline augmentation (5× expansion)
+# SECTION 8 - Offline augmentation (7× expansion)
+def augment_stain(img: np.ndarray) -> np.ndarray:
+    """Apply random per-channel stain perturbation."""
+    img_float = img.astype(np.float32) / 255.0
+    for ch in range(3):
+        scale = np.random.uniform(0.85, 1.15)
+        img_float[:, :, ch] *= scale
+    return np.clip(img_float * 255, 0, 255).astype(np.uint8)
+
+
 def augment_for_deit(train_data: list) -> list:
-    """Apply offline augmentation for DeiT training (5× expansion).
+    """Apply offline augmentation for DeiT training (7× expansion).
 
     Args:
         train_data: List of (patient_id, image, label) tuples.
 
     Returns:
-        Augmented list with original + 4 transformed copies per sample.
+        Augmented list with original + 6 transformed copies per sample.
 
     """
     augmented = list(train_data)
@@ -193,11 +202,20 @@ def augment_for_deit(train_data: list) -> list:
             cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE),
             label,
         ))
-    print(f"✓ {len(train_data)} → {len(augmented)} samples (5× expansion)")
+        augmented.append((f"{pid}_stain1", augment_stain(img), label))
+        augmented.append((f"{pid}_stain2", augment_stain(img), label))
+    print(f"✓ {len(train_data)} → {len(augmented)} samples (7× expansion)")
     return augmented
 
 
 train_data = augment_for_deit(train_data)
+import psutil
+ram_gb = psutil.virtual_memory().used / 1e9
+print(f"✓ RAM used: {ram_gb:.1f} GB / 16 GB")
+if ram_gb > 12:
+    print("⚠️ High RAM warning")
+else:
+    print("✅ RAM usage safe")
 
 # SECTION 9 - Datasets and DataLoaders
 # DeiT-specific stronger transforms
