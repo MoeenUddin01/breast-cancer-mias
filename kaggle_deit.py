@@ -47,7 +47,7 @@ def main() -> None:
         raise FileNotFoundError(f"Missing training script: {train_script}")
 
     print("🚀 Starting DeiT training script...")
-    exec(train_script.read_text(encoding="utf-8"), globals())
+    subprocess.run([sys.executable, str(train_script)], check=True)
 
 
 main()
