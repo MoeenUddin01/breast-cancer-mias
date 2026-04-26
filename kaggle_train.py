@@ -175,21 +175,6 @@ print(f"PyTorch version: {torch.__version__}")
 print(f"CUDA available: {torch.cuda.is_available()}")
 if torch.cuda.is_available():
     print(f"CUDA device: {torch.cuda.get_device_name(0)}")
-
-# ═══════════════════════════════════════════════════════
-# CONTROL CELL — Change flags HERE only
-# Never touch kaggle_train.py flags again
-# ═══════════════════════════════════════════════════════
-import os
-
-os.environ["TRAIN_RESNET"] = "false"
-os.environ["TRAIN_EFFICIENTNET"] = "false"
-os.environ["TRAIN_XCEPTION"] = "false"
-os.environ["TRAIN_VIT"] = "true"  # ← only change this
-os.environ["EVALUATE_MODELS"] = "false"
-os.environ["GENERATE_PLOTS"] = "false"
-os.environ["SHOW_SUMMARY"] = "false"
-
 print("=" * 40)
 print("  TRAINING CONFIGURATION")
 print("=" * 40)
