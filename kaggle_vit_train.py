@@ -15,15 +15,13 @@ import dagshub
 import mlflow
 from kaggle_secrets import UserSecretsClient
 from torch.utils.data import DataLoader, WeightedRandomSampler
-from tqdm import tqdm
 
 sys.path.insert(0, "/kaggle/working/breast-cancer-mias")
 
 from src.data.loader import load_data
 from src.data.splitter import split_by_patient_id
-from src.data.preprocessor import apply_clahe
-from src.data.augmentor import get_train_transforms, get_test_transforms
 from src.data.dataset import MIASDataset
+from torchvision import transforms
 from src.transformers.vit_model import get_vit_model
 from src.transformers.vit_trainer import train_vit
 from src.transformers.vit_config import VIT_BATCH_SIZE
@@ -88,21 +86,36 @@ print("\n⏳ Splitting by patient ID...")
 train_data, test_data = split_by_patient_id(data, TEST_SIZE, SEED)
 print(f"✓ Train: {len(train_data)} | Test: {len(test_data)}")
 
-# SECTION 7 - CLAHE
-print("\n⏳ Applying CLAHE...")
-train_data = [
-    (pid, apply_clahe(img), label)
-    for pid, img, label in tqdm(train_data, desc="CLAHE train")
-]
-test_data = [
-    (pid, apply_clahe(img), label)
-    for pid, img, label in tqdm(test_data, desc="CLAHE test")
-]
-
-# SECTION 8 - Datasets and DataLoaders
+# SECTION 7 - Datasets and DataLoaders
+# Note: Preprocessing (resize + normalize) is now handled inside MIASDataset
+# via preprocess_image(). CLAHE is no longer applied as a separate step.
 IMAGE_SIZE = (224, 224)
-train_transforms = get_train_transforms(IMAGE_SIZE)
-test_transforms = get_test_transforms(IMAGE_SIZE)
+
+# Updated transforms - remove normalization since it's done in preprocess_image()
+train_transforms = transforms.Compose([
+    transforms.Resize(IMAGE_SIZE),
+    transforms.RandomHorizontalFlip(p=0.5),
+    transforms.RandomVerticalFlip(p=0.5),
+    transforms.RandomRotation(degrees=180),
+    transforms.ColorJitter(
+        brightness=0.3,
+        contrast=0.3,
+        saturation=0.2,
+        hue=0.1
+    ),
+    transforms.RandomAffine(
+        degrees=0,
+        translate=(0.1, 0.1),
+        scale=(0.9, 1.1)
+    ),
+    transforms.RandomGrayscale(p=0.1),
+    transforms.ToTensor(),
+])
+
+test_transforms = transforms.Compose([
+    transforms.Resize(IMAGE_SIZE),
+    transforms.ToTensor(),
+])
 
 train_dataset = MIASDataset(train_data, train_transforms, IMAGE_SIZE)
 test_dataset = MIASDataset(test_data, test_transforms, IMAGE_SIZE)
