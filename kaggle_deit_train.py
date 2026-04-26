@@ -171,14 +171,14 @@ deit_train_transforms = T.Compose([
         translate=(0.1, 0.1),
         scale=(0.9, 1.1),
     ),
-    T.RandomErasing(
-        p=0.25,
-        scale=(0.02, 0.15),
-    ),
     T.ToTensor(),
     T.Normalize(
         mean=[0.485, 0.456, 0.406],
         std=[0.229, 0.224, 0.225],
+    ),
+    T.RandomErasing(
+        p=0.25,
+        scale=(0.02, 0.15),
     ),
 ])
 
@@ -196,8 +196,13 @@ test_dataset = MIASDataset(test_data, deit_test_transforms, IMAGE_SIZE)
 
 # WeightedRandomSampler for class imbalance (recalculate after augmentation)
 train_labels = [item[2] for item in train_data]
-class_counts = torch.bincount(torch.tensor(train_labels))
-class_weights = 1.0 / class_counts.float()
+class_counts = torch.bincount(torch.tensor(train_labels), minlength=2)
+if (class_counts == 0).any():
+    print(
+        "⚠️ Train split contains only one class after patient split/augmentation. "
+        "Sampling weights fallback applied for the missing class."
+    )
+class_weights = 1.0 / class_counts.clamp_min(1).float()
 sample_weights = [class_weights[l].item() for l in train_labels]
 sampler = WeightedRandomSampler(
     weights=sample_weights,
@@ -287,13 +292,17 @@ all_probs = np.array(all_probs)
 all_preds = (all_probs >= 0.5).astype(int)
 
 accuracy = accuracy_score(all_labels, all_preds)
-auc_score = roc_auc_score(all_labels, all_probs)
+try:
+    auc_score = roc_auc_score(all_labels, all_probs)
+except ValueError:
+    print("⚠️ Test AUC undefined for single-class labels; reporting AUC=0.5.")
+    auc_score = 0.5
 f1 = f1_score(all_labels, all_preds)
 precision = precision_score(all_labels, all_preds)
 recall = recall_score(all_labels, all_preds)
-cm = confusion_matrix(all_labels, all_preds)
+cm = confusion_matrix(all_labels, all_preds, labels=[0, 1])
 tn, fp, fn, tp = cm.ravel()
-specificity = tn / (tn + fp)
+specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
 
 # Save txt report
 date_str = datetime.now().strftime("%Y-%m-%d %H:%M")

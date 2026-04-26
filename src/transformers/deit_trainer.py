@@ -49,7 +49,14 @@ def _compute_pos_weight(train_loader: torch.utils.data.DataLoader, device: torch
         labels_int = labels.int()
         num_positives += labels_int.sum().item()
         num_negatives += (1 - labels_int).sum().item()
-    pos_weight = torch.tensor([num_negatives / num_positives]).to(device)
+    if num_positives == 0 or num_negatives == 0:
+        print(
+            "  [WARN] Single-class train split detected while computing pos_weight; "
+            "falling back to pos_weight=1.0"
+        )
+        pos_weight = torch.tensor([1.0], device=device)
+    else:
+        pos_weight = torch.tensor([num_negatives / num_positives], device=device)
     print(
         f"  pos_weight: {pos_weight.item():.4f} "
         f"(neg={num_negatives}, pos={num_positives})"
@@ -360,7 +367,12 @@ def _validate(
 
     avg_loss = total_loss / len(loader)
     accuracy = (all_preds == all_labels).mean()
-    auc = roc_auc_score(all_labels, all_probs)
+    try:
+        auc = roc_auc_score(all_labels, all_probs)
+    except ValueError:
+        # Happens when val set contains only one class.
+        print("  [WARN] Validation AUC is undefined for single-class labels; using 0.5.")
+        auc = 0.5
 
     return avg_loss, accuracy, auc
 
