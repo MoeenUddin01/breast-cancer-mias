@@ -1,7 +1,7 @@
-"""Training logic specifically for ViT-B/16.
+"""Training logic specifically for DeiT-B Distilled.
 
-Separate from CNN trainer to avoid any interference.
-Uses same verbose output style as CNN trainer.
+Separate from CNN and ViT trainers to avoid interference.
+Uses gradient accumulation and label smoothing for better training.
 """
 
 from __future__ import annotations
@@ -13,22 +13,26 @@ import numpy as np
 import torch
 import torch.nn as nn
 from sklearn.metrics import roc_auc_score
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
-
-from src.transformers.vit_config import (
-    VIT_EPOCHS,
-    VIT_PATIENCE,
-    VIT_PHASE1_EPOCHS,
-    VIT_PHASE1_LR,
-    VIT_PHASE2_LR_BACKBONE,
-    VIT_PHASE2_LR_HEAD,
-    VIT_UNFREEZE_BLOCKS,
-    VIT_WEIGHT_DECAY,
+from torch.optim.lr_scheduler import (
+    CosineAnnealingWarmRestarts,
+    LinearLR,
 )
-from src.transformers.vit_model import unfreeze_vit_blocks
+
+from src.transformers.deit_config import (
+    DEIT_ACCUMULATION_STEPS,
+    DEIT_EPOCHS,
+    DEIT_PATIENCE,
+    DEIT_PHASE1_EPOCHS,
+    DEIT_PHASE1_LR,
+    DEIT_PHASE2_LR_BACKBONE,
+    DEIT_PHASE2_LR_HEAD,
+    DEIT_UNFREEZE_BLOCKS,
+    DEIT_WEIGHT_DECAY,
+)
+from src.transformers.deit_model import unfreeze_deit_blocks
 
 
-def _compute_pos_weight(train_loader, device):
+def _compute_pos_weight(train_loader: torch.utils.data.DataLoader, device: torch.device) -> torch.Tensor:
     """Compute pos_weight from train labels for class imbalance.
 
     Args:
@@ -53,14 +57,25 @@ def _compute_pos_weight(train_loader, device):
     return pos_weight
 
 
-def train_vit(model, train_loader, val_loader, model_name, device):
-    """Two-phase training for ViT-B/16.
+def train_deit(
+    model: nn.Module,
+    train_loader: torch.utils.data.DataLoader,
+    val_loader: torch.utils.data.DataLoader,
+    model_name: str,
+    device: torch.device,
+) -> tuple[dict, int, float]:
+    """Two-phase training for DeiT-B Distilled with gradient accumulation.
 
-    Phase 1: Train head only (5 epochs, lr=1e-3)
-    Phase 2: Fine-tune last 4 blocks (remaining, lr=1e-5/1e-4)
+    Phase 1: Train head only (8 epochs, lr=5e-4) with linear warmup
+    Phase 2: Fine-tune last 8 blocks (remaining, lr=2e-6/2e-5)
+
+    Features:
+    - Gradient accumulation (effective batch = 16 * 4 = 64)
+    - Label smoothing (smooth=0.05)
+    - CosineAnnealingWarmRestarts scheduler in Phase 2
 
     Args:
-        model: The ViT model to train.
+        model: The DeiT model to train.
         train_loader: DataLoader for training data.
         val_loader: DataLoader for validation data.
         model_name: Name identifier for saving checkpoints.
@@ -85,27 +100,38 @@ def train_vit(model, train_loader, val_loader, model_name, device):
     no_improve = 0
     start_time = time.time()
 
+    total_epochs = DEIT_PHASE1_EPOCHS + DEIT_EPOCHS
+
     # ── PHASE 1: Head only ───────────────
     print(
         f"\n  Phase 1: Training head only "
-        f"for {VIT_PHASE1_EPOCHS} epochs "
-        f"(lr={VIT_PHASE1_LR})"
+        f"for {DEIT_PHASE1_EPOCHS} epochs "
+        f"(lr={DEIT_PHASE1_LR})"
     )
 
     optimizer_p1 = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
-        lr=VIT_PHASE1_LR,
-        weight_decay=VIT_WEIGHT_DECAY,
+        lr=DEIT_PHASE1_LR,
+        weight_decay=DEIT_WEIGHT_DECAY,
     )
 
-    for epoch in range(VIT_PHASE1_EPOCHS):
-        train_loss, train_acc = _train_epoch(
+    warmup_scheduler = LinearLR(
+        optimizer_p1,
+        start_factor=0.1,
+        end_factor=1.0,
+        total_iters=DEIT_PHASE1_EPOCHS,
+    )
+
+    for epoch in range(DEIT_PHASE1_EPOCHS):
+        train_loss, train_acc = _train_epoch_ga(
             model, train_loader, optimizer_p1, criterion, device, epoch
         )
         val_loss, val_acc, val_auc = _validate(model, val_loader, criterion, device)
+        warmup_scheduler.step()
+
         _log_epoch(
             epoch,
-            VIT_PHASE1_EPOCHS + VIT_EPOCHS,
+            total_epochs,
             train_loss,
             train_acc,
             val_loss,
@@ -138,12 +164,12 @@ def train_vit(model, train_loader, val_loader, model_name, device):
                 model.state_dict(), f"outputs/models/{model_name}_best.pth"
             )
 
-    # ── PHASE 2: Fine-tune last 4 blocks ─
+    # ── PHASE 2: Fine-tune last 8 blocks ─
     print(
         f"\n  Phase 2: Fine-tuning last "
-        f"{VIT_UNFREEZE_BLOCKS} transformer blocks"
+        f"{DEIT_UNFREEZE_BLOCKS} transformer blocks"
     )
-    unfreeze_vit_blocks(model, VIT_UNFREEZE_BLOCKS)
+    unfreeze_deit_blocks(model, DEIT_UNFREEZE_BLOCKS)
 
     backbone_params = [
         p
@@ -154,29 +180,28 @@ def train_vit(model, train_loader, val_loader, model_name, device):
 
     optimizer_p2 = torch.optim.AdamW(
         [
-            {"params": backbone_params, "lr": VIT_PHASE2_LR_BACKBONE},
-            {"params": head_params, "lr": VIT_PHASE2_LR_HEAD},
+            {"params": backbone_params, "lr": DEIT_PHASE2_LR_BACKBONE},
+            {"params": head_params, "lr": DEIT_PHASE2_LR_HEAD},
         ],
-        weight_decay=VIT_WEIGHT_DECAY,
+        weight_decay=DEIT_WEIGHT_DECAY,
     )
 
-    # CosineAnnealingWarmRestarts — better than ReduceLROnPlateau
-    # for transformers
     scheduler = CosineAnnealingWarmRestarts(
-        optimizer_p2, T_0=10, T_mult=2, eta_min=1e-7
+        optimizer_p2, T_0=15, T_mult=2, eta_min=1e-8
     )
 
-    for epoch in range(VIT_PHASE1_EPOCHS, VIT_PHASE1_EPOCHS + VIT_EPOCHS):
-        train_loss, train_acc = _train_epoch(
+    for epoch in range(DEIT_PHASE1_EPOCHS, total_epochs):
+        train_loss, train_acc = _train_epoch_ga(
             model, train_loader, optimizer_p2, criterion, device, epoch
         )
         val_loss, val_acc, val_auc = _validate(model, val_loader, criterion, device)
-        scheduler.step(epoch)
-        current_lr = optimizer_p2.param_groups[0]["lr"]
+        scheduler.step()
+        current_lr_backbone = optimizer_p2.param_groups[0]["lr"]
+        current_lr_head = optimizer_p2.param_groups[1]["lr"]
 
         _log_epoch(
             epoch,
-            VIT_PHASE1_EPOCHS + VIT_EPOCHS,
+            total_epochs,
             train_loss,
             train_acc,
             val_loss,
@@ -197,7 +222,8 @@ def train_vit(model, train_loader, val_loader, model_name, device):
                 "val_loss": val_loss,
                 "val_accuracy": val_acc,
                 "val_auc": val_auc,
-                "learning_rate": current_lr,
+                "learning_rate_backbone": current_lr_backbone,
+                "learning_rate_head": current_lr_head,
                 "phase": 2,
             },
             step=epoch,
@@ -214,7 +240,7 @@ def train_vit(model, train_loader, val_loader, model_name, device):
         else:
             no_improve += 1
 
-        if no_improve >= VIT_PATIENCE:
+        if no_improve >= DEIT_PATIENCE:
             print(f"  Early stopping at epoch {epoch + 1}")
             break
 
@@ -229,13 +255,20 @@ def train_vit(model, train_loader, val_loader, model_name, device):
     mlflow.log_artifact(f"outputs/models/{model_name}_best.pth")
 
     print(f"\n  Training completed in {train_time:.1f} minutes")
-    print(f"  Best validation AUC: {best_val_auc:.4f} " f"(epoch {best_epoch})")
+    print(f"  Best validation AUC: {best_val_auc:.4f} (epoch {best_epoch})")
 
     return history, best_epoch, train_time
 
 
-def _train_epoch(model, loader, optimizer, criterion, device, epoch):
-    """Single training epoch with progress bar.
+def _train_epoch_ga(
+    model: nn.Module,
+    loader: torch.utils.data.DataLoader,
+    optimizer: torch.optim.Optimizer,
+    criterion: nn.Module,
+    device: torch.device,
+    epoch: int,
+) -> tuple[float, float]:
+    """Single training epoch with gradient accumulation and label smoothing.
 
     Args:
         model: Model to train.
@@ -254,21 +287,33 @@ def _train_epoch(model, loader, optimizer, criterion, device, epoch):
     correct = 0
     total = 0
     total_batches = len(loader)
+    smooth = 0.05  # Label smoothing factor
+
+    optimizer.zero_grad()
 
     for batch_idx, (images, labels) in enumerate(loader):
         images = images.to(device)
         labels = labels.to(device).unsqueeze(1)
 
-        optimizer.zero_grad()
         outputs = model(images)
         if outputs.dim() == 1:
             outputs = outputs.unsqueeze(1)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        optimizer.step()
 
-        total_loss += loss.item()
+        # Label smoothing
+        labels_sm = labels * (1 - smooth) + 0.5 * smooth
+
+        loss = criterion(outputs, labels_sm)
+        loss = loss / DEIT_ACCUMULATION_STEPS  # Scale for gradient accumulation
+        loss.backward()
+
+        # Gradient accumulation step
+        if (batch_idx + 1) % DEIT_ACCUMULATION_STEPS == 0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            optimizer.zero_grad()
+
+        # Accumulate statistics (use original labels for accuracy)
+        total_loss += loss.item() * DEIT_ACCUMULATION_STEPS
         preds = (torch.sigmoid(outputs) >= 0.5).float()
         correct += (preds == labels).sum().item()
         total += labels.size(0)
@@ -295,7 +340,12 @@ def _train_epoch(model, loader, optimizer, criterion, device, epoch):
     return avg_loss, accuracy
 
 
-def _validate(model, loader, criterion, device):
+def _validate(
+    model: nn.Module,
+    loader: torch.utils.data.DataLoader,
+    criterion: nn.Module,
+    device: torch.device,
+) -> tuple[float, float, float]:
     """Validation pass.
 
     Args:
@@ -340,16 +390,16 @@ def _validate(model, loader, criterion, device):
 
 
 def _log_epoch(
-    epoch,
-    total_epochs,
-    train_loss,
-    train_acc,
-    val_loss,
-    val_acc,
-    val_auc,
-    best_val_auc,
-    optimizer,
-):
+    epoch: int,
+    total_epochs: int,
+    train_loss: float,
+    train_acc: float,
+    val_loss: float,
+    val_acc: float,
+    val_auc: float,
+    best_val_auc: float,
+    optimizer: torch.optim.Optimizer,
+) -> None:
     """Print epoch results box.
 
     Args:

@@ -1,0 +1,61 @@
+======================================================================
+  TRANSFORMER vs CNN — MODEL COMPARISON REPORT
+======================================================================
+  Date         : 2026-04-26 10:45
+  Dataset      : BreakHis All Magnifications
+  Total Images : 7,909
+  Patients     : 324
+  Split        : 85% train / 15% test by patient ID
+  GPU          : Tesla T4
+======================================================================
+
+  COMPLETE RESULTS TABLE:
+  ──────────────────────────────────────────────────────────────────
+  Model                  AUC    Acc%      F1    Prec     Rec    Time
+  ──────────────────────────────────────────────────────────────────
+  ViT-B/16            0.9810  92.43%  0.9538  0.9382  0.9698   35.0m
+  ResNet152           0.9780  94.04%  0.9571  0.9465  0.9678   25.3m
+  EfficientNetB2      0.9862  94.93%  0.9629  0.9538  0.9721   12.3m ★ BEST
+  Xception            0.8827  78.18%  0.8259  0.8012  0.8518   12.0m
+  ──────────────────────────────────────────────────────────────────
+
+  VIT-B/16 ANALYSIS:
+  ──────────────────────────────────────────────────────────────────
+  Architecture       : Transformer (ViT-B/16)
+  Pretrained         : ImageNet-21k (14M images)
+  AUC-ROC           : 0.9810
+  Accuracy          : 92.43%
+  F1 Score          : 0.9538
+  Best Epoch        : 18
+  Train Time        : 35.0 minutes
+  Confusion Matrix  : TN=396 FP=58 FN=22 TP=766
+  ──────────────────────────────────────────────────────────────────
+
+  CNN BASELINE COMPARISON:
+  ──────────────────────────────────────────────────────────────────
+  Best CNN Model    : EfficientNetB2
+  Best CNN AUC      : 0.9862
+  AUC Gap (ViT-CNN) : -0.0052
+  ──────────────────────────────────────────────────────────────────
+
+  MODEL RANKINGS BY AUC:
+  ──────────────────────────────────────────────────────────────────
+  1. EfficientNetB2     AUC: 0.9862
+  2. ViT-B/16           AUC: 0.9810
+  3. ResNet152          AUC: 0.9780
+  4. Xception           AUC: 0.8827
+  ──────────────────────────────────────────────────────────────────
+
+  CONCLUSIONS:
+  ──────────────────────────────────────────────────────────────────
+  • Best Overall: EfficientNetB2 (AUC=0.9862)
+  • ViT-B/16 ranks #2 with AUC=0.9810
+
+  • EfficientNetB2 remains the most efficient (best AUC/time ratio)
+  • ViT-B/16 shows competitive performance with transformer architecture
+  • ResNet152 provides strong baseline CNN performance
+  ──────────────────────────────────────────────────────────────────
+
+======================================================================
+  ⚠️  Research prototype. Not for clinical use.
+======================================================================
