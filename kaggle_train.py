@@ -177,6 +177,37 @@ if torch.cuda.is_available():
     print(f"CUDA device: {torch.cuda.get_device_name(0)}")
 
 # ═══════════════════════════════════════════════════════
+# CONTROL CELL — Change flags HERE only
+# Never touch kaggle_train.py flags again
+# ═══════════════════════════════════════════════════════
+import os
+
+os.environ["TRAIN_RESNET"] = "false"
+os.environ["TRAIN_EFFICIENTNET"] = "false"
+os.environ["TRAIN_XCEPTION"] = "false"
+os.environ["TRAIN_VIT"] = "true"  # ← only change this
+os.environ["EVALUATE_MODELS"] = "false"
+os.environ["GENERATE_PLOTS"] = "false"
+os.environ["SHOW_SUMMARY"] = "false"
+
+print("=" * 40)
+print("  TRAINING CONFIGURATION")
+print("=" * 40)
+for key in [
+    "TRAIN_RESNET",
+    "TRAIN_EFFICIENTNET",
+    "TRAIN_XCEPTION",
+    "TRAIN_VIT",
+    "EVALUATE_MODELS",
+    "GENERATE_PLOTS",
+    "SHOW_SUMMARY",
+]:
+    val = os.environ.get(key, "false")
+    status = "✅ ON " if val == "true" else "⭕ OFF"
+    print(f"  {status}  {key}")
+print("=" * 40)
+
+# ═══════════════════════════════════════════════════════
 # CELL 5: Configuration
 # ═══════════════════════════════════════════════════════
 
@@ -191,11 +222,22 @@ LEARNING_RATE = 1e-4
 PATIENCE = 6
 SEED = dagshub_config.SEED
 
-# Model training flags
-TRAIN_VIT = True   # set True when ready
-TRAIN_RESNET = False
-TRAIN_EFFICIENTNET = False
-TRAIN_XCEPTION = False
+# Model training flags (set via environment variables)
+TRAIN_RESNET = os.environ.get("TRAIN_RESNET", "false").lower() == "true"
+TRAIN_EFFICIENTNET = os.environ.get("TRAIN_EFFICIENTNET", "false").lower() == "true"
+TRAIN_XCEPTION = os.environ.get("TRAIN_XCEPTION", "false").lower() == "true"
+TRAIN_VIT = os.environ.get("TRAIN_VIT", "false").lower() == "true"
+EVALUATE_MODELS = os.environ.get("EVALUATE_MODELS", "false").lower() == "true"
+GENERATE_PLOTS = os.environ.get("GENERATE_PLOTS", "false").lower() == "true"
+SHOW_SUMMARY = os.environ.get("SHOW_SUMMARY", "false").lower() == "true"
+
+print("  TRAIN_RESNET       :", TRAIN_RESNET)
+print("  TRAIN_EFFICIENTNET :", TRAIN_EFFICIENTNET)
+print("  TRAIN_XCEPTION     :", TRAIN_XCEPTION)
+print("  TRAIN_VIT          :", TRAIN_VIT)
+print("  EVALUATE_MODELS    :", EVALUATE_MODELS)
+print("  GENERATE_PLOTS     :", GENERATE_PLOTS)
+print("  SHOW_SUMMARY       :", SHOW_SUMMARY)
 
 # Other constants
 TEST_SIZE = dagshub_config.TEST_SIZE
@@ -989,7 +1031,6 @@ else:
 # ═══════════════════════════════════════════════════════
 
 # After all models are trained, set EVALUATE_MODELS = True
-EVALUATE_MODELS = False
 
 if EVALUATE_MODELS:
     print("\n" + "=" * 60)
@@ -1042,7 +1083,6 @@ else:
 # ═══════════════════════════════════════════════════════
 
 # After evaluation, set GENERATE_PLOTS = True
-GENERATE_PLOTS = False
 
 if GENERATE_PLOTS:
     print("\n" + "=" * 60)
@@ -1388,7 +1428,6 @@ def save_best_model_visualization(all_metrics, all_histories,
 # ═══════════════════════════════════════════════════════
 
 # After all steps complete, set SHOW_SUMMARY = True
-SHOW_SUMMARY = False
 
 if SHOW_SUMMARY:
     print("\n" + "=" * 60)
