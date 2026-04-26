@@ -21,6 +21,31 @@ from src.transformers.deit_config import (
 from src.transformers.deit_head import build_deit_head
 
 
+class DeiTBinaryClassifier(nn.Module):
+    """Wrap a DeiT backbone and force binary-logit output."""
+
+    def __init__(self, backbone: nn.Module, head: nn.Module) -> None:
+        super().__init__()
+        self.backbone = backbone
+        self.head = head
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Return logits with shape [B, 1] for BCEWithLogitsLoss."""
+        features = self.backbone(x)
+
+        if isinstance(features, (tuple, list)):
+            features = features[0]
+
+        if features.dim() == 3:
+            # Some DeiT/timm variants may return token sequence [B, N, C].
+            features = features[:, 0]
+
+        logits = self.head(features)
+        if logits.dim() == 1:
+            logits = logits.unsqueeze(1)
+        return logits
+
+
 def get_deit_model() -> nn.Module:
     """Load pretrained DeiT-B Distilled and attach custom head.
 
@@ -38,7 +63,7 @@ def get_deit_model() -> nn.Module:
         DeiT-B Distilled model with custom classification head attached.
 
     """
-    model = timm.create_model(
+    backbone = timm.create_model(
         DEIT_MODEL_NAME,
         pretrained=DEIT_PRETRAINED,
         num_classes=0,
@@ -49,22 +74,26 @@ def get_deit_model() -> nn.Module:
     # Check actual output size
     dummy = torch.zeros(1, 3, DEIT_IMAGE_SIZE[0], DEIT_IMAGE_SIZE[1])
     with torch.no_grad():
-        out = model(dummy)
+        out = backbone(dummy)
+    if isinstance(out, (tuple, list)):
+        out = out[0]
+    if out.dim() == 3:
+        out = out[:, 0]
     actual_features = out.shape[-1]
     print(f"  DeiT output features: {actual_features}")
 
     # Step 1: Freeze ALL backbone layers
-    for param in model.parameters():
+    for param in backbone.parameters():
         param.requires_grad = False
 
     # Step 2: Add custom classification head
-    model.head = build_deit_head(in_features=actual_features)
-    model.head_dist = nn.Identity()
+    model = DeiTBinaryClassifier(
+        backbone=backbone,
+        head=build_deit_head(in_features=actual_features),
+    )
 
-    # Step 3: Make sure head and head_dist are trainable
+    # Step 3: Make sure custom head is trainable
     for param in model.head.parameters():
-        param.requires_grad = True
-    for param in model.head_dist.parameters():
         param.requires_grad = True
 
     # Print structure confirmation
@@ -90,7 +119,8 @@ def unfreeze_deit_blocks(model: nn.Module, num_blocks: int = 8) -> None:
         num_blocks: Number of transformer blocks to unfreeze from the end.
 
     """
-    blocks = list(model.blocks.children())
+    base_model = model.backbone if hasattr(model, "backbone") else model
+    blocks = list(base_model.blocks.children())
     total_blocks = len(blocks)
 
     for block in blocks[-num_blocks:]:
@@ -98,8 +128,8 @@ def unfreeze_deit_blocks(model: nn.Module, num_blocks: int = 8) -> None:
             param.requires_grad = True
 
     # Also unfreeze the final norm layer
-    if hasattr(model, "norm"):
-        for param in model.norm.parameters():
+    if hasattr(base_model, "norm"):
+        for param in base_model.norm.parameters():
             param.requires_grad = True
 
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
