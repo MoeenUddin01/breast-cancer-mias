@@ -53,7 +53,7 @@ def _compute_pos_weight(train_loader, device):
     return pos_weight
 
 
-def train_vit(model, train_loader, val_loader, model_name, device, config):
+def train_vit(model, train_loader, val_loader, model_name, device):
     """Two-phase training for ViT-B/16.
 
     Phase 1: Train head only (5 epochs, lr=1e-3)
@@ -65,7 +65,6 @@ def train_vit(model, train_loader, val_loader, model_name, device, config):
         val_loader: DataLoader for validation data.
         model_name: Name identifier for saving checkpoints.
         device: Device to run training on.
-        config: Configuration dictionary (unused, for compatibility).
 
     Returns:
         Tuple of (history dict, best_epoch int, train_time float).
