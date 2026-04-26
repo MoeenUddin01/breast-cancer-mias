@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 # SECTION 1 - Imports
+import atexit
+import fcntl
 import os
+import random
 import sys
 import time
-import random
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -51,6 +53,38 @@ IMAGE_SIZE = DEIT_IMAGE_SIZE
 QUIET_TQDM = True
 ENABLE_OFFLINE_AUG = os.environ.get("DEIT_ENABLE_OFFLINE_AUG", "false").lower() == "true"
 BATCH_SIZE = int(os.environ.get("DEIT_BATCH_SIZE_OVERRIDE", str(DEIT_BATCH_SIZE)))
+TRAIN_LOCK_PATH = Path("/tmp/deit_training_train_script.lock")
+
+
+def _acquire_train_script_lock() -> object | None:
+    """Allow only one kaggle_deit_train.py process at a time."""
+    lock_file = open(TRAIN_LOCK_PATH, "w", encoding="utf-8")
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock_file.close()
+        return None
+
+    lock_file.write(str(os.getpid()))
+    lock_file.flush()
+
+    def _cleanup_lock() -> None:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            lock_file.close()
+            if TRAIN_LOCK_PATH.exists():
+                TRAIN_LOCK_PATH.unlink()
+        except OSError:
+            pass
+
+    atexit.register(_cleanup_lock)
+    return lock_file
+
+
+_train_lock = _acquire_train_script_lock()
+if _train_lock is None:
+    print("⚠️ kaggle_deit_train.py is already running. Exiting duplicate run.")
+    raise SystemExit(0)
 
 os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(PLOTS_DIR, exist_ok=True)
@@ -76,6 +110,17 @@ print(f"✓ Seed set to {SEED}")
 # SECTION 4 - DagHub init
 try:
     secrets = UserSecretsClient()
+    # Optional Hugging Face auth to avoid unauthenticated Hub warnings/rate limits.
+    try:
+        hf_token = secrets.get_secret("HF_TOKEN")
+        if hf_token:
+            os.environ["HF_TOKEN"] = hf_token
+            os.environ["HUGGINGFACE_HUB_TOKEN"] = hf_token
+            print("✓ Hugging Face token loaded from Kaggle secrets")
+    except Exception:
+        # Keep training flow unchanged if HF secret is not configured.
+        pass
+
     os.environ["MLFLOW_TRACKING_USERNAME"] = secrets.get_secret(
         "MLFLOW_TRACKING_USERNAME"
     )
