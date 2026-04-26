@@ -33,6 +33,7 @@ from src.transformers.deit_config import (
     DEIT_MODEL_NAME,
     DEIT_BATCH_SIZE,
     DEIT_ACCUMULATION_STEPS,
+    DEIT_EPOCHS,
     DEIT_IMAGE_SIZE,
     DEIT_PHASE1_EPOCHS,
     DEIT_UNFREEZE_BLOCKS,
@@ -51,8 +52,8 @@ NUM_WORKERS = 0
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 IMAGE_SIZE = DEIT_IMAGE_SIZE
 QUIET_TQDM = True
-ENABLE_OFFLINE_AUG = os.environ.get("DEIT_ENABLE_OFFLINE_AUG", "false").lower() == "true"
-BATCH_SIZE = int(os.environ.get("DEIT_BATCH_SIZE_OVERRIDE", str(DEIT_BATCH_SIZE)))
+ENABLE_OFFLINE_AUG = True
+BATCH_SIZE = DEIT_BATCH_SIZE
 TRAIN_LOCK_PATH = Path("/tmp/deit_training_train_script.lock")
 
 
@@ -96,8 +97,11 @@ print("  BreakHis Breast Cancer Detection")
 print("=" * 60)
 print(f"  Device : {DEVICE}")
 print(f"  Dataset: {DATA_DIR}")
-print(f"  Batch  : {BATCH_SIZE}")
-print(f"  Offline Augmentation : {'ON (5x)' if ENABLE_OFFLINE_AUG else 'OFF'}")
+print(f"  Batch size     : {DEIT_BATCH_SIZE}")
+print(f"  Phase 1 epochs : {DEIT_PHASE1_EPOCHS}")
+print(f"  Phase 2 epochs : {DEIT_EPOCHS}")
+print(f"  Total max      : {DEIT_PHASE1_EPOCHS + DEIT_EPOCHS}")
+print("  Offline aug    : ON")
 
 # SECTION 3 - Seed
 random.seed(SEED)
@@ -193,10 +197,7 @@ def augment_for_deit(train_data: list) -> list:
     return augmented
 
 
-if ENABLE_OFFLINE_AUG:
-    train_data = augment_for_deit(train_data)
-else:
-    print("✓ Offline augmentation skipped (set DEIT_ENABLE_OFFLINE_AUG=true to enable)")
+train_data = augment_for_deit(train_data)
 
 # SECTION 9 - Datasets and DataLoaders
 # DeiT-specific stronger transforms
@@ -269,7 +270,7 @@ deit_test_loader = DataLoader(
     num_workers=NUM_WORKERS,
 )
 
-print(f"✓ Train batches: {len(deit_train_loader)}")
+print(f"  Train batches  : {len(deit_train_loader)}")
 print(f"✓ Test batches : {len(deit_test_loader)}")
 
 # SECTION 10 - Initialize model
@@ -298,7 +299,7 @@ with mlflow.start_run(run_name="deit_b_distilled"):
         "scheduler_p2": "CosineAnnealingWarmRestarts",
         "label_smoothing": 0.05,
         "drop_path_rate": DEIT_DROP_PATH_RATE,
-        "offline_aug": "disabled" if not ENABLE_OFFLINE_AUG else "5x_hflip_vflip_rot90_rot270",
+        "offline_aug": "5x_hflip_vflip_rot90_rot270",
     })
 
     deit_history, deit_best_epoch, deit_train_time = train_deit(
