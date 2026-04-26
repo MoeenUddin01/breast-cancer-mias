@@ -192,7 +192,7 @@ PATIENCE = 6
 SEED = dagshub_config.SEED
 
 # Model training flags
-TRAIN_VIT = False  # set True when ready
+TRAIN_VIT = True   # set True when ready
 TRAIN_RESNET = False
 TRAIN_EFFICIENTNET = False
 TRAIN_XCEPTION = False
