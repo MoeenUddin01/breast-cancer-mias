@@ -6,7 +6,7 @@ PyTorch-based deep learning project for binary breast cancer detection from Brea
 
 - **Data Pipeline**: BreakHis histology RGB images (all magnifications: 40X, 100X, 200X, 400X), train on single magnification or combine all, patient-aware splitting (prevents data leakage), CLAHE-enhanced preprocessing
 - **Class Imbalance Handling**: WeightedRandomSampler for balanced training batches + BCEWithLogitsLoss with computed pos_weight
-- **Models**: Pretrained CNN backbones (ResNet-152, EfficientNet-B2, Xception) with custom classification heads
+- **Models**: Pretrained CNN backbones (ResNet-152, EfficientNet-B2, Xception) with custom classification heads + Vision Transformer (ViT-B/16) for research comparison
 - **Training**: Adam optimizer, early stopping on validation AUC-ROC (primary metric for imbalanced data)
 - **Evaluation**: AUC-ROC and F1 as primary metrics (accuracy is misleading with imbalanced data), classification reports, confusion matrices
 - **Artifacts**: Automatic model checkpointing and results saving to per-model folders
@@ -89,6 +89,11 @@ criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 │   │   ├── resnet_model.py
 │   │   ├── efficientnet_model.py
 │   │   └── xception_model.py
+│   ├── transformers/                # Vision Transformer (ViT) for research comparison
+│   │   ├── vit_config.py            # ViT hyperparameters
+│   │   ├── vit_head.py              # Custom classification head (LayerNorm + GELU)
+│   │   ├── vit_model.py             # ViT model builder with progressive unfreezing
+│   │   └── vit_trainer.py           # Two-phase training (head → backbone)
 │   ├── training/                    # Training loop and utilities
 │   │   ├── trainer.py               # Main training with pos_weight computation
 │   │   ├── validator.py             # Validation metrics (AUC-ROC focus)
@@ -118,13 +123,13 @@ python3 -m venv .venv
 source .venv/bin/activate
 
 # Core dependencies
-pip install numpy opencv-python pillow pyyaml scikit-learn tqdm matplotlib seaborn
+pip install numpy opencv-python pillow pyyaml scikit-learn matplotlib seaborn
 
 # PyTorch (adjust for your CUDA version)
 pip install torch torchvision
 
 # Model backbones
-pip install timm  # Required for Xception
+pip install timm  # Required for Xception and ViT
 ```
 
 ## Data Layout (BreakHis)
@@ -175,7 +180,7 @@ This will:
 1. Set random seeds for reproducibility
 2. Create output directories
 3. Preprocess BreakHis data (load images from all magnifications, patient-aware split, CLAHE, create DataLoaders)
-4. Train Xception, ResNet-152, and EfficientNet-B2 models
+4. Train Xception, ResNet-152, EfficientNet-B2, and ViT-B/16 models
 5. Evaluate each model and generate individual reports/plots
 6. Create a comparison plot across all models
 7. Print a final comparison table to console
@@ -220,8 +225,20 @@ os.chdir("/kaggle/working/breast-cancer-mias")
 sys.path.insert(0, "/kaggle/working/breast-cancer-mias")
 ```
 
-**Cell 3:** Run training
+**Cell 3:** Configure and run training
 ```python
+# CONTROL CELL — Set training flags here only
+import os
+
+os.environ["TRAIN_RESNET"] = "false"
+os.environ["TRAIN_EFFICIENTNET"] = "false"
+os.environ["TRAIN_XCEPTION"] = "false"
+os.environ["TRAIN_VIT"] = "true"  # Enable ViT training
+os.environ["EVALUATE_MODELS"] = "false"
+os.environ["GENERATE_PLOTS"] = "false"
+os.environ["SHOW_SUMMARY"] = "false"
+
+# Execute training pipeline
 exec(open("kaggle_train.py").read(), globals())
 ```
 
@@ -426,6 +443,8 @@ The `train()` function expects a config object with:
 | `src/evaluation/evaluator.py` | Comprehensive evaluation metrics |
 | `src/evaluation/visualizer.py` | Training curves, confusion matrices, comparisons |
 | `src/models/base.py` | Shared classification head and utilities |
+| `src/transformers/vit_model.py` | ViT-B/16 model with progressive unfreezing |
+| `src/transformers/vit_trainer.py` | Two-phase ViT training (head → backbone) |
 | `src/utils/helpers.py` | Seed setting, device selection, directory creation |
 
 ## Output Locations
