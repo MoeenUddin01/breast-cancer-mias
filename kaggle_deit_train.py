@@ -48,6 +48,7 @@ TEST_SIZE = 0.15
 NUM_WORKERS = 2
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 IMAGE_SIZE = DEIT_IMAGE_SIZE
+QUIET_TQDM = True
 
 os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(PLOTS_DIR, exist_ok=True)
@@ -102,12 +103,13 @@ print(f"✓ Train: {len(train_data)} | Test: {len(test_data)}")
 print("\n⏳ Applying CLAHE...")
 train_data = [
     (pid, apply_clahe(img), label)
-    for pid, img, label in tqdm(train_data, desc="CLAHE train")
+    for pid, img, label in tqdm(train_data, desc="CLAHE train", disable=QUIET_TQDM)
 ]
 test_data = [
     (pid, apply_clahe(img), label)
-    for pid, img, label in tqdm(test_data, desc="CLAHE test")
+    for pid, img, label in tqdm(test_data, desc="CLAHE test", disable=QUIET_TQDM)
 ]
+print("✓ CLAHE preprocessing complete")
 
 # SECTION 8 - Offline augmentation (5× expansion)
 def augment_for_deit(train_data: list) -> list:
@@ -121,7 +123,11 @@ def augment_for_deit(train_data: list) -> list:
 
     """
     augmented = list(train_data)
-    for pid, img, label in tqdm(train_data, desc="Augmenting for DeiT"):
+    for pid, img, label in tqdm(
+        train_data,
+        desc="Augmenting for DeiT",
+        disable=QUIET_TQDM,
+    ):
         augmented.append((f"{pid}_hf", cv2.flip(img, 1), label))
         augmented.append((f"{pid}_vf", cv2.flip(img, 0), label))
         augmented.append((

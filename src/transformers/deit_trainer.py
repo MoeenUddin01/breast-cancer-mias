@@ -102,12 +102,7 @@ def train_deit(
 
     total_epochs = DEIT_PHASE1_EPOCHS + DEIT_EPOCHS
 
-    # ── PHASE 1: Head only ───────────────
-    print(
-        f"\n  Phase 1: Training head only "
-        f"for {DEIT_PHASE1_EPOCHS} epochs "
-        f"(lr={DEIT_PHASE1_LR})"
-    )
+    print(f"\nTraining progress: 0.0% (0/{total_epochs} epochs)")
 
     optimizer_p1 = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
@@ -138,7 +133,6 @@ def train_deit(
             val_acc,
             val_auc,
             best_val_auc,
-            optimizer_p1,
         )
         history["train_loss"].append(train_loss)
         history["train_accuracy"].append(train_acc)
@@ -164,11 +158,6 @@ def train_deit(
                 model.state_dict(), f"outputs/models/{model_name}_best.pth"
             )
 
-    # ── PHASE 2: Fine-tune last 8 blocks ─
-    print(
-        f"\n  Phase 2: Fine-tuning last "
-        f"{DEIT_UNFREEZE_BLOCKS} transformer blocks"
-    )
     unfreeze_deit_blocks(model, DEIT_UNFREEZE_BLOCKS)
 
     backbone_params = [
@@ -208,7 +197,6 @@ def train_deit(
             val_acc,
             val_auc,
             best_val_auc,
-            optimizer_p2,
         )
         history["train_loss"].append(train_loss)
         history["train_accuracy"].append(train_acc)
@@ -236,12 +224,11 @@ def train_deit(
             torch.save(
                 model.state_dict(), f"outputs/models/{model_name}_best.pth"
             )
-            print(f"  ✓ New best saved: AUC={val_auc:.4f}")
         else:
             no_improve += 1
 
         if no_improve >= DEIT_PATIENCE:
-            print(f"  Early stopping at epoch {epoch + 1}")
+            print(f"\nEarly stopping at epoch {epoch + 1}")
             break
 
     train_time = (time.time() - start_time) / 60
@@ -254,8 +241,8 @@ def train_deit(
     )
     mlflow.log_artifact(f"outputs/models/{model_name}_best.pth")
 
-    print(f"\n  Training completed in {train_time:.1f} minutes")
-    print(f"  Best validation AUC: {best_val_auc:.4f} (epoch {best_epoch})")
+    print(f"\nTraining completed in {train_time:.1f} minutes")
+    print(f"Best validation AUC: {best_val_auc:.4f} (epoch {best_epoch})")
 
     return history, best_epoch, train_time
 
@@ -318,29 +305,12 @@ def _train_epoch_ga(
         correct += (preds == labels).sum().item()
         total += labels.size(0)
 
-        # Print progress every 50 batches
-        if (batch_idx + 1) % 50 == 0 or batch_idx == total_batches - 1:
-            avg_loss = total_loss / (batch_idx + 1)
-            avg_acc = correct / total * 100
-            pct = (batch_idx + 1) / total_batches
-            filled = int(20 * pct)
-            bar = "█" * filled + "░" * (20 - filled)
-            print(
-                f"\r  [{bar}] {pct * 100:.1f}%  "
-                f"batch {batch_idx + 1}/{total_batches}  "
-                f"│  loss={avg_loss:.4f}  "
-                f"acc={avg_acc:.2f}%",
-                end="",
-                flush=True,
-            )
-
     # Handle final partial accumulation window.
     if total_batches % DEIT_ACCUMULATION_STEPS != 0:
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
         optimizer.zero_grad()
 
-    print()
     avg_loss = total_loss / total_batches
     accuracy = correct / total
     return avg_loss, accuracy
@@ -404,9 +374,8 @@ def _log_epoch(
     val_acc: float,
     val_auc: float,
     best_val_auc: float,
-    optimizer: torch.optim.Optimizer,
 ) -> None:
-    """Print epoch results box.
+    """Print concise single-line epoch progress.
 
     Args:
         epoch: Current epoch number (0-indexed).
@@ -417,19 +386,15 @@ def _log_epoch(
         val_acc: Validation accuracy.
         val_auc: Validation AUC-ROC.
         best_val_auc: Best validation AUC achieved so far.
-        optimizer: Optimizer instance (for learning rate display).
 
     """
+    done = epoch + 1
+    pct = done / total_epochs * 100.0
     is_best = val_auc > best_val_auc
-    marker = "  ⭐ NEW BEST!" if is_best else ""
+    marker = " | NEW BEST" if is_best else ""
     print(
-        f"""
-╔═══════════════════════════════════════╗
-║  EPOCH {epoch + 1}/{total_epochs} RESULTS{marker:<14}║
-╠═══════════════════════════════════════╣
-║  METRIC        TRAIN        VAL       ║
-║  Loss     {train_loss:>10.4f}  {val_loss:>10.4f}  ║
-║  Accuracy {train_acc:>10.4f}  {val_acc:>10.4f}  ║
-║  AUC              —  {val_auc:>10.4f}  ║
-╚═══════════════════════════════════════╝"""
+        f"\rTraining progress: {pct:5.1f}% ({done}/{total_epochs})"
+        f" | val_auc={val_auc:.4f}{marker}",
+        end="",
+        flush=True,
     )
