@@ -1,4 +1,4 @@
-"""DeiT-B Distilled model for breast cancer detection.
+"""DeiT-Small Distilled model for breast cancer detection.
 
 Pretrained on ImageNet-1k with distillation.
 Fine-tuned on BreakHis histology dataset.
@@ -47,32 +47,32 @@ class DeiTBinaryClassifier(nn.Module):
 
 
 def get_deit_model() -> nn.Module:
-    """Load pretrained DeiT-B Distilled and attach custom head.
+    """Load pretrained DeiT-Small Distilled and attach custom head.
 
     Architecture:
-    - Backbone: DeiT-B Distilled pretrained on ImageNet-1k
+    - Backbone: DeiT-Small Distilled pretrained on ImageNet-1k
     - Head: LayerNorm → Dropout → Linear → GELU → LayerNorm →
             Dropout → Linear → GELU → Dropout → Linear(1)
     - Loss: BCEWithLogitsLoss (no sigmoid in head)
 
     DeiT has TWO output tokens: CLS token and DIST token.
     timm DeiT with num_classes=0 returns concatenated
-    [CLS, DIST] = 768*2 = 1536 features depending on version.
+    [CLS, DIST] = 384*2 = 768 features depending on version.
 
     Returns:
-        DeiT-B Distilled model with custom classification head attached.
+        DeiT-Small Distilled model with custom classification head attached.
 
     """
     backbone = timm.create_model(
         DEIT_MODEL_NAME,
         pretrained=DEIT_PRETRAINED,
         num_classes=0,
-        img_size=DEIT_IMAGE_SIZE[0],
+        img_size=224,
         drop_path_rate=DEIT_DROP_PATH_RATE,
     )
 
     # Check actual output size
-    dummy = torch.zeros(1, 3, DEIT_IMAGE_SIZE[0], DEIT_IMAGE_SIZE[1])
+    dummy = torch.zeros(1, 3, 224, 224)
     with torch.no_grad():
         out = backbone(dummy)
     if isinstance(out, (tuple, list)):
@@ -100,7 +100,7 @@ def get_deit_model() -> nn.Module:
     total = sum(p.numel() for p in model.parameters())
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     frozen = total - trainable
-    print(f"  Model: DeiT-B Distilled (ImageNet-1k+distillation)")
+    print(f"  Model: DeiT-Small Distilled (ImageNet-1k+distillation)")
     print(f"  Total parameters    : {total:,}")
     print(f"  Trainable parameters: {trainable:,}")
     print(f"  Frozen parameters   : {frozen:,}")
@@ -111,8 +111,8 @@ def get_deit_model() -> nn.Module:
 def unfreeze_deit_blocks(model: nn.Module, num_blocks: int = 8) -> None:
     """Unfreeze last N transformer blocks for Phase 2 fine-tuning.
 
-    DeiT-B Distilled has 12 transformer blocks total.
-    We unfreeze last 8 for fine-tuning (more than ViT for better adaptation).
+    DeiT-Small Distilled has 12 transformer blocks total.
+    We unfreeze last 8 for fine-tuning (balanced speed and performance).
 
     Args:
         model: The DeiT model to unfreeze blocks in.

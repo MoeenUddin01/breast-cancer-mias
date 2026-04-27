@@ -32,7 +32,7 @@ from src.transformers.deit_model import get_deit_model
 from src.transformers.deit_trainer import train_deit
 from src.transformers.deit_config import (
     DEIT_BATCH_SIZE, DEIT_PHASE1_EPOCHS,
-    DEIT_EPOCHS, DEIT_SEED
+    DEIT_EPOCHS, DEIT_SEED, DEIT_ACCUMULATION_STEPS
 )
 
 DATA_DIR    = "/kaggle/input/datasets/ambarish/breakhis/BreaKHis_v1/BreaKHis_v1/histology_slides/breast/"
@@ -51,7 +51,7 @@ for d in [MODELS_DIR, PLOTS_DIR, REPORTS_DIR, AUG_DIR]:
     os.makedirs(d, exist_ok=True)
 
 print("=" * 60)
-print("  DeiT-B DISTILLED TRANSFORMER TRAINING")
+print("  DeiT-SMALL DISTILLED TRANSFORMER TRAINING")
 print("  BreakHis Breast Cancer Detection")
 print("=" * 60)
 print(f"  Device         : {DEVICE}")
@@ -213,21 +213,21 @@ deit_test_loader = DataLoader(
 print(f"✓ Train batches: {len(deit_train_loader)}")
 print(f"✓ Test batches : {len(deit_test_loader)}")
 
-print("\n⏳ Initializing DeiT-B Distilled...")
+print("\n⏳ Initializing DeiT-Small Distilled...")
 deit_model = get_deit_model()
 deit_model = deit_model.to(DEVICE)
 
-print("\n🚀 Starting DeiT-B Distilled training...")
+print("\n🚀 Starting DeiT-Small Distilled training...")
 
-with mlflow.start_run(run_name="deit_b_distilled"):
+with mlflow.start_run(run_name="deit_small_distilled"):
     mlflow.log_params({
-        "model"            : "deit_base_distilled_patch16_224",
+        "model"            : "deit_small_distilled_patch16_224",
         "pretrained_on"    : "ImageNet-1k+distillation",
         "dataset"          : "BreakHis_AllMagnifications",
         "train_samples"    : len(train_data),
         "test_samples"     : len(test_data),
         "batch_size"       : DEIT_BATCH_SIZE,
-        "effective_batch"  : DEIT_BATCH_SIZE * 2,
+        "effective_batch"  : DEIT_BATCH_SIZE * DEIT_ACCUMULATION_STEPS,
         "architecture"     : "DeiT-Distilled-Transformer",
         "phase1_epochs"    : DEIT_PHASE1_EPOCHS,
         "offline_aug"      : "5x_hflip_vflip_stain1_stain2",
@@ -276,10 +276,10 @@ date_str  = datetime.now().strftime("%Y-%m-%d %H:%M")
 txt_path  = REPORTS_DIR + "deit_report.txt"
 with open(txt_path, "w") as f:
     f.write(f"{'='*50}\n")
-    f.write("  DEIT-B DISTILLED RESULTS\n")
+    f.write("  DEIT-SMALL DISTILLED RESULTS\n")
     f.write(f"{'='*50}\n")
     f.write(f"  Date        : {date_str}\n")
-    f.write("  Model       : deit_base_distilled_patch16_224\n")
+    f.write("  Model       : deit_small_distilled_patch16_224\n")
     f.write("  Pretrained  : ImageNet-1k + distillation\n")
     f.write("  Dataset     : BreakHis All Magnifications\n")
     f.write(f"{'='*50}\n")
@@ -375,7 +375,7 @@ def safe_log_artifact(path):
     else:
         print(f"⚠️ Skipping: {path}")
 
-with mlflow.start_run(run_name="deit_b_evaluation"):
+with mlflow.start_run(run_name="deit_small_evaluation"):
     mlflow.log_metrics({
         "test_auc"        : auc_score,
         "test_accuracy"   : accuracy,
@@ -390,7 +390,7 @@ with mlflow.start_run(run_name="deit_b_evaluation"):
 
 print(f"""
 {'='*60}
-  DeiT-B DISTILLED COMPLETE
+  DeiT-SMALL DISTILLED COMPLETE
   AUC-ROC     : {auc_score:.4f}
   Accuracy    : {accuracy*100:.2f}%
   F1 Score    : {f1:.4f}
