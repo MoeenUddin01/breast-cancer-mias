@@ -10,7 +10,6 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from tqdm import tqdm
 
 from src.utils import config
 
@@ -117,39 +116,25 @@ def load_data(
                         print(f"[ERROR] Failed to process {image_file}: {e}")
                     break  # Only count once per magnification
 
-    # Print per-magnification counts
-    print("\n" + "=" * 50)
-    print("  BREAKHIS DATASET COUNTS BY MAGNIFICATION")
-    print("=" * 50)
-    total_benign = 0
-    total_malignant = 0
-    for mag in magnifications:
-        b_count = mag_counts[mag]["benign"]
-        m_count = mag_counts[mag]["malignant"]
-        total_benign += b_count
-        total_malignant += m_count
-        print(f"  {mag:4s} → benign: {b_count:4d}  malignant: {m_count:4d}")
-    print("-" * 50)
+    # Print summary
+    total_benign = sum(mag_counts[mag]["benign"] for mag in magnifications)
+    total_malignant = sum(mag_counts[mag]["malignant"] for mag in magnifications)
     print(
-        f"  Total → benign: {total_benign:4d}  malignant: {total_malignant:4d}  patients: {len(base_patient_ids):4d}"
+        f"✓ Found {len(image_paths)} images: {total_benign} benign, {total_malignant} malignant, {len(base_patient_ids)} patients"
     )
-    print("=" * 50)
 
     # Load and resize images
-    print(
-        f"\n⏳ Loading {len(image_paths)} images (resizing to {target_size[0]}×{target_size[1]})..."
-    )
-    for image_file, patient_id, label in tqdm(image_paths, desc="Loading images"):
+    print(f"⏳ Loading images (resizing to {target_size[0]}×{target_size[1]})...")
+    for image_file, patient_id, label in image_paths:
         try:
             img = cv2.imread(str(image_file))
             if img is None:
-                print(f"[WARNING] Failed to load image: {image_file}")
                 continue
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img = cv2.resize(img, target_size)
             data.append((patient_id, img, label))
         except Exception as e:
-            print(f"[ERROR] Failed to load/resize {image_file}: {e}")
+            print(f"[ERROR] Failed to load {image_file}: {e}")
 
     print(f"✓ Loaded {len(data)} images into RAM")
 

@@ -6,9 +6,7 @@ import torch
 import mlflow
 import dagshub
 import numpy as np
-import psutil
 from datetime import datetime
-from tqdm import tqdm
 from torchvision import transforms as T
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from kaggle_secrets import UserSecretsClient
@@ -86,36 +84,22 @@ try:
     )
     dagshub.init(repo_owner="MoeenUddin01", repo_name="breast-cancer-mias", mlflow=True)
     mlflow.set_experiment("BreakHis_Transformer_Comparison")
-    print("✓ DagHub initialized")
-    print(f"✓ MLflow URI: {mlflow.get_tracking_uri()}")
+    print("✓ DagHub/MLflow initialized")
 except Exception as e:
     print(f"⚠️ DagHub failed: {e}")
 
-print("\n⏳ Loading BreakHis dataset...")
-ram = psutil.virtual_memory().used / 1e9
-print(f"  RAM before load: {ram:.1f} GB")
+print("\n⏳ Loading dataset...")
 data = load_data(DATA_DIR)
-ram = psutil.virtual_memory().used / 1e9
-print(f"  RAM after load : {ram:.1f} GB")
 print(f"✓ Total samples: {len(data)}")
 
 print("\n⏳ Splitting by patient ID...")
 train_data, test_data = split_by_patient_id(data, TEST_SIZE, SEED)
 print(f"✓ Train: {len(train_data)} | Test: {len(test_data)}")
-ram = psutil.virtual_memory().used / 1e9
-print(f"  RAM after split: {ram:.1f} GB")
 
-print("\n⏳ Applying CLAHE upfront...")
-train_data = [
-    (pid, apply_clahe(img), label)
-    for pid, img, label in tqdm(train_data, desc="CLAHE train")
-]
-test_data = [
-    (pid, apply_clahe(img), label)
-    for pid, img, label in tqdm(test_data, desc="CLAHE test")
-]
-ram = psutil.virtual_memory().used / 1e9
-print(f"  RAM after CLAHE: {ram:.1f} GB")
+print("⏳ Applying CLAHE...")
+train_data = [(pid, apply_clahe(img), label) for pid, img, label in train_data]
+test_data = [(pid, apply_clahe(img), label) for pid, img, label in test_data]
+print("✓ CLAHE applied")
 
 
 def augment_stain(img):
@@ -128,7 +112,7 @@ def augment_stain(img):
 
 def augment_for_deit(train_data):
     augmented = list(train_data)
-    for pid, img, label in tqdm(train_data, desc="Augmenting"):
+    for pid, img, label in train_data:
         augmented.append((f"{pid}_hf", cv2.flip(img, 1), label))
         augmented.append((f"{pid}_vf", cv2.flip(img, 0), label))
         augmented.append((f"{pid}_stain1", augment_stain(img), label))
@@ -140,14 +124,7 @@ def augment_for_deit(train_data):
 
 
 print("\n⏳ Augmenting training data...")
-ram = psutil.virtual_memory().used / 1e9
-print(f"  RAM before aug: {ram:.1f} GB")
 train_data = augment_for_deit(train_data)
-ram = psutil.virtual_memory().used / 1e9
-print(f"  RAM after aug : {ram:.1f} GB")
-if ram > 13:
-    raise MemoryError(f"RAM too high: {ram:.1f} GB — reduce augmentation")
-print("✅ RAM safe")
 
 deit_train_transforms = T.Compose(
     [
