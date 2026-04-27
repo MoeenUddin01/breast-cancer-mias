@@ -161,8 +161,8 @@ deit_train_transforms = T.Compose([
         degrees=0,
         translate=(0.1, 0.1),
         scale=(0.9, 1.1)),
-    T.RandomErasing(p=0.25, scale=(0.02, 0.15)),
     T.ToTensor(),
+    T.RandomErasing(p=0.25, scale=(0.02, 0.15)),
     T.Normalize(
         mean=[0.485, 0.456, 0.406],
         std=[0.229, 0.224, 0.225]),
