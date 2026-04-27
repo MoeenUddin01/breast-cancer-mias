@@ -12,11 +12,8 @@ import torch.nn as nn
 
 from src.transformers.deit_config import (
     DEIT_DROP_PATH_RATE,
-    DEIT_IMAGE_SIZE,
-    DEIT_IN_FEATURES,
     DEIT_MODEL_NAME,
     DEIT_PRETRAINED,
-    DEIT_UNFREEZE_BLOCKS,
 )
 from src.transformers.deit_head import build_deit_head
 
@@ -100,7 +97,7 @@ def get_deit_model() -> nn.Module:
     total = sum(p.numel() for p in model.parameters())
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     frozen = total - trainable
-    print(f"  Model: DeiT-Small Distilled (ImageNet-1k+distillation)")
+    print("  Model: DeiT-Small Distilled (ImageNet-1k+distillation)")
     print(f"  Total parameters    : {total:,}")
     print(f"  Trainable parameters: {trainable:,}")
     print(f"  Frozen parameters   : {frozen:,}")

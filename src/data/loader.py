@@ -130,11 +130,15 @@ def load_data(
         total_malignant += m_count
         print(f"  {mag:4s} → benign: {b_count:4d}  malignant: {m_count:4d}")
     print("-" * 50)
-    print(f"  Total → benign: {total_benign:4d}  malignant: {total_malignant:4d}  patients: {len(base_patient_ids):4d}")
+    print(
+        f"  Total → benign: {total_benign:4d}  malignant: {total_malignant:4d}  patients: {len(base_patient_ids):4d}"
+    )
     print("=" * 50)
 
     # Load and resize images
-    print(f"\n⏳ Loading {len(image_paths)} images (resizing to {target_size[0]}×{target_size[1]})...")
+    print(
+        f"\n⏳ Loading {len(image_paths)} images (resizing to {target_size[0]}×{target_size[1]})..."
+    )
     for image_file, patient_id, label in tqdm(image_paths, desc="Loading images"):
         try:
             img = cv2.imread(str(image_file))
