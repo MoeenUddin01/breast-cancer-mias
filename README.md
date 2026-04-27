@@ -458,6 +458,51 @@ The `train()` function expects a config object with:
 | Plots | `outputs/plots/{model_name}_*.png` |
 | Model comparison | `outputs/plots/model_comparison.png` |
 
+## Model Results
+
+### CNN Models Performance
+
+| Model | AUC-ROC | Accuracy | F1 Score | Training Time |
+|-------|---------|----------|----------|---------------|
+| **EfficientNetB2** | 0.9862 | 94.93% | 0.9629 | 12.3 min |
+| ResNet152 | 0.9780 | 94.04% | 0.9571 | 25.3 min |
+| Xception | 0.8827 | 78.18% | 0.8259 | 12.0 min |
+
+**Best CNN Model**: EfficientNetB2 achieves the highest AUC-ROC (0.9862) with the fastest training time (12.3 minutes).
+
+### Vision Transformer (DeiT) Performance
+
+| Model | AUC-ROC | Accuracy | F1 Score | Training Time | Parameters |
+|-------|---------|----------|----------|---------------|------------|
+| **DeiT-Base Distilled** | 0.9721 | 95.01% | 0.9640 | 108.4 min | 86.7M |
+| DeiT-Small Distilled | 0.9811 | 93.32% | 0.9510 | 68.0 min | 22.0M |
+
+**Key Findings:**
+- DeiT-Base achieves the **highest accuracy (95.01%)** and **highest F1 score (0.9640)** among all models
+- DeiT-Base does NOT beat EfficientNetB2 in AUC-ROC (0.9721 vs 0.9862)
+- Transformers require significantly more training time (9× slower than EfficientNetB2)
+- Transformers need larger datasets to fully outperform CNNs due to lower inductive bias
+
+### Comparison Analysis
+
+**DeiT-Base vs EfficientNetB2:**
+- ✅ Accuracy: +0.08% advantage
+- ✅ F1 Score: +0.0011 advantage
+- ❌ AUC-ROC: -0.0141 disadvantage
+- ❌ Training Time: +96.1 minutes (9× slower)
+
+**Conclusion:** For this small medical imaging dataset (7,909 images), CNNs remain superior due to stronger inductive bias and faster training. Transformers show promise but require larger datasets or ensemble techniques to consistently outperform CNNs.
+
+### Research Visualizations
+
+All comparison charts and analysis are available in `artifacts/`:
+
+- **`artifacts/deit_vs_cnn_comparison/`** - DeiT vs CNN comparison charts and detailed summary
+- **`artifacts/research/`** - Publication-quality research charts (8 visualizations)
+- **`artifacts/research/onebyone/`** - Individual metric charts (8 separate PNG files)
+
+See `artifacts/deit_vs_cnn_comparison/summary_of_comparison.txt` for comprehensive analysis.
+
 ## Documentation
 
 Architecture diagrams with file references and line numbers:
