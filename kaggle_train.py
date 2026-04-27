@@ -399,6 +399,7 @@ train_loader = DataLoader(
     num_workers=NUM_WORKERS,
     pin_memory=True,
     drop_last=True,   # Drop last incomplete batch to avoid BatchNorm1d errors
+    persistent_workers=True,
 )
 test_loader = DataLoader(
     test_dataset,
@@ -406,6 +407,7 @@ test_loader = DataLoader(
     shuffle=False,
     num_workers=NUM_WORKERS,
     pin_memory=True,
+    persistent_workers=True,
 )
 
 print(f"✓ Train samples  : {len(train_data)} (online aug each epoch)")

@@ -1,12 +1,16 @@
 """Data loader for BreakHis breast cancer dataset.
 
 Handles loading of RGB PNG histology images from BreakHis dataset structure.
-Uses 400X magnification images only.
+Loads images as numpy arrays resized to 224x224 to save RAM.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+
+import cv2
+import numpy as np
+from tqdm import tqdm
 
 from src.utils import config
 
@@ -33,25 +37,28 @@ def _extract_patient_id(filename: str) -> str:
 def load_data(
     data_dir: str | None = None,
     magnifications: list[str] | None = None,
-) -> list[tuple[str, str, int]]:
+    target_size: tuple[int, int] = (224, 224),
+) -> list[tuple[str, np.ndarray, int]]:
     """Load BreakHis dataset from directory structure.
 
     Walks through data_dir/benign/SOB/ and data_dir/malignant/SOB/
     recursively to find all PNG images in folders matching the
-    specified magnifications. Patient ID includes magnification suffix
-    to differentiate same-patient images at different magnifications.
+    specified magnifications. Images are loaded as numpy arrays
+    and resized to target_size to save RAM.
 
     Args:
         data_dir: Root directory containing benign/ and malignant/ folders.
             If None, uses config.DATA_DIR.
         magnifications: List of magnification levels to load.
             If None, uses config.MAGNIFICATIONS.
+        target_size: Target size (width, height) for resizing images.
+            Default (224, 224) reduces RAM from ~9GB to ~1.5GB.
 
     Returns:
         List of tuples containing:
             - patient_id (str): Extracted patient ID with magnification suffix
                 (e.g., "14-4659_400X")
-            - image_path (str): Image path for lazy loading later
+            - image_array (np.ndarray): Resized RGB image as uint8 array
             - label (int): Binary label (0 for benign, 1 for malignant)
 
     Raises:
@@ -69,11 +76,14 @@ def load_data(
     if not data_path.exists():
         raise FileNotFoundError(f"Data directory not found: {data_path}")
 
-    data: list[tuple[str, str, int]] = []
+    data: list[tuple[str, np.ndarray, int]] = []
     mag_counts: dict[str, dict[str, int]] = {
         mag: {"benign": 0, "malignant": 0} for mag in magnifications
     }
     base_patient_ids: set[str] = set()
+
+    # Collect all image paths first
+    image_paths: list[tuple[Path, str, int]] = []
 
     # Process benign images
     benign_path = data_path / "benign" / "SOB"
@@ -84,7 +94,7 @@ def load_data(
                     try:
                         base_patient_id = _extract_patient_id(image_file.name)
                         patient_id = f"{base_patient_id}_{mag}"
-                        data.append((patient_id, str(image_file), 0))
+                        image_paths.append((image_file, patient_id, 0))
                         base_patient_ids.add(base_patient_id)
                         mag_counts[mag]["benign"] += 1
                     except Exception as e:
@@ -100,7 +110,7 @@ def load_data(
                     try:
                         base_patient_id = _extract_patient_id(image_file.name)
                         patient_id = f"{base_patient_id}_{mag}"
-                        data.append((patient_id, str(image_file), 1))
+                        image_paths.append((image_file, patient_id, 1))
                         base_patient_ids.add(base_patient_id)
                         mag_counts[mag]["malignant"] += 1
                     except Exception as e:
@@ -122,5 +132,21 @@ def load_data(
     print("-" * 50)
     print(f"  Total → benign: {total_benign:4d}  malignant: {total_malignant:4d}  patients: {len(base_patient_ids):4d}")
     print("=" * 50)
+
+    # Load and resize images
+    print(f"\n⏳ Loading {len(image_paths)} images (resizing to {target_size[0]}×{target_size[1]})...")
+    for image_file, patient_id, label in tqdm(image_paths, desc="Loading images"):
+        try:
+            img = cv2.imread(str(image_file))
+            if img is None:
+                print(f"[WARNING] Failed to load image: {image_file}")
+                continue
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img = cv2.resize(img, target_size)
+            data.append((patient_id, img, label))
+        except Exception as e:
+            print(f"[ERROR] Failed to load/resize {image_file}: {e}")
+
+    print(f"✓ Loaded {len(data)} images into RAM")
 
     return data

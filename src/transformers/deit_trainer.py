@@ -13,6 +13,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from sklearn.metrics import roc_auc_score
+from torch.cuda.amp import GradScaler, autocast
 from torch.optim.lr_scheduler import (
     CosineAnnealingWarmRestarts,
     LinearLR,
@@ -106,6 +107,7 @@ def train_deit(
     best_epoch = 0
     no_improve = 0
     start_time = time.time()
+    scaler = GradScaler()
 
     total_epochs = DEIT_PHASE1_EPOCHS + DEIT_EPOCHS
 
@@ -126,7 +128,7 @@ def train_deit(
 
     for epoch in range(DEIT_PHASE1_EPOCHS):
         train_loss, train_acc = _train_epoch_ga(
-            model, train_loader, optimizer_p1, criterion, device, epoch
+            model, train_loader, optimizer_p1, criterion, device, epoch, scaler
         )
         val_loss, val_acc, val_auc = _validate(model, val_loader, criterion, device)
         warmup_scheduler.step()
@@ -188,7 +190,7 @@ def train_deit(
 
     for epoch in range(DEIT_PHASE1_EPOCHS, total_epochs):
         train_loss, train_acc = _train_epoch_ga(
-            model, train_loader, optimizer_p2, criterion, device, epoch
+            model, train_loader, optimizer_p2, criterion, device, epoch, scaler
         )
         val_loss, val_acc, val_auc = _validate(model, val_loader, criterion, device)
         scheduler.step()
@@ -260,9 +262,10 @@ def _train_epoch_ga(
     optimizer: torch.optim.Optimizer,
     criterion: nn.Module,
     device: torch.device,
+    scaler: GradScaler,
     epoch: int,
 ) -> tuple[float, float]:
-    """Single training epoch with gradient accumulation and label smoothing.
+    """Single training epoch with gradient accumulation, label smoothing, and mixed precision.
 
     Args:
         model: Model to train.
@@ -271,6 +274,7 @@ def _train_epoch_ga(
         criterion: Loss criterion.
         device: Device to run on.
         epoch: Current epoch number.
+        scaler: GradScaler for mixed precision training.
 
     Returns:
         Tuple of (average loss, accuracy).
@@ -289,21 +293,25 @@ def _train_epoch_ga(
         images = images.to(device)
         labels = labels.to(device).unsqueeze(1)
 
-        outputs = model(images)
-        if outputs.dim() == 1:
-            outputs = outputs.unsqueeze(1)
+        with autocast():
+            outputs = model(images)
+            if outputs.dim() == 1:
+                outputs = outputs.unsqueeze(1)
 
-        # Label smoothing
-        labels_sm = labels * (1 - smooth) + 0.5 * smooth
+            # Label smoothing
+            labels_sm = labels * (1 - smooth) + 0.5 * smooth
 
-        loss = criterion(outputs, labels_sm)
-        loss = loss / DEIT_ACCUMULATION_STEPS  # Scale for gradient accumulation
-        loss.backward()
+            loss = criterion(outputs, labels_sm)
+            loss = loss / DEIT_ACCUMULATION_STEPS  # Scale for gradient accumulation
+
+        scaler.scale(loss).backward()
 
         # Gradient accumulation step
         if (batch_idx + 1) % DEIT_ACCUMULATION_STEPS == 0:
+            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
             optimizer.zero_grad()
 
         # Accumulate statistics (use original labels for accuracy)
@@ -314,8 +322,10 @@ def _train_epoch_ga(
 
     # Handle final partial accumulation window.
     if total_batches % DEIT_ACCUMULATION_STEPS != 0:
+        scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        optimizer.step()
+        scaler.step(optimizer)
+        scaler.update()
         optimizer.zero_grad()
 
     avg_loss = total_loss / total_batches

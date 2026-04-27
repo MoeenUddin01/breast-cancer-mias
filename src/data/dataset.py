@@ -8,13 +8,10 @@ from __future__ import annotations
 
 from typing import Callable
 
-import cv2
 import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
-
-from src.data.preprocessor import preprocess_image
 
 
 class MIASDataset(Dataset):
@@ -70,8 +67,8 @@ class MIASDataset(Dataset):
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """Get a single preprocessed image and its label by index.
 
-        Applies preprocess_image, converts to PIL, applies transform,
-        and returns the tensor with label.
+        Images are already loaded as numpy arrays in RAM with CLAHE applied.
+        Converts to PIL, applies transform, and returns the tensor with label.
 
         Args:
             idx: Index of the sample to retrieve.
@@ -89,27 +86,15 @@ class MIASDataset(Dataset):
             raise IndexError(f"Index {idx} out of range for dataset of size {len(self)}")
 
         try:
-            image_id, image_source, label = self.data[idx]
+            image_id, image_array, label = self.data[idx]
         except Exception as e:
             print(f"[ERROR] Failed to retrieve data at index {idx}: {e}")
             raise
 
         try:
-            from src.data.preprocessor import apply_clahe
-
-            if isinstance(image_source, str):
-                image_array = cv2.imread(image_source)
-                if image_array is None:
-                    raise FileNotFoundError(f"Image not found: {image_source}")
-                image_array = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
-            else:
-                image_array = image_source
-
-            # Apply CLAHE lazily at sample access time to reduce peak RAM.
-            image_array = apply_clahe(image_array)
-
-            # Apply remaining preprocessing (3-channel conversion, resize, normalize)
-            processed = preprocess_image(image_array, self.image_size)
+            # CLAHE already applied upfront — skip it here
+            # Just normalize to [0, 1] for PIL conversion
+            processed = image_array.astype(np.float32) / 255.0
         except Exception as e:
             print(f"[ERROR] Preprocessing failed for image {image_id} at index {idx}: {e}")
             raise
@@ -132,7 +117,7 @@ class MIASDataset(Dataset):
             # Apply transform pipeline (receives PIL Image)
             tensor = self.transform(image_pil)
         except Exception as e:
-            print(f"[ERROR] Transform failed for image {image_id}: {e}")
+            print(f"[ERROR] Transform failed for {image_id}: {e}")
             raise
 
         try:
