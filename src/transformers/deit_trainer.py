@@ -13,7 +13,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from sklearn.metrics import f1_score, roc_auc_score
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from torch.optim.lr_scheduler import (
     CosineAnnealingWarmRestarts,
     LinearLR,
@@ -294,7 +294,7 @@ def _train_epoch_ga(
         images = images.to(device)
         labels = labels.to(device).unsqueeze(1)
 
-        with autocast():
+        with autocast("cuda"):
             outputs = model(images)
             if outputs.dim() == 1:
                 outputs = outputs.unsqueeze(1)
