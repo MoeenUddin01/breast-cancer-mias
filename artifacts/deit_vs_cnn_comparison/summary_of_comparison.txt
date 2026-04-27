@@ -1,0 +1,129 @@
+============================================================
+  DEIT-BASE VS CNN MODELS — COMPARISON SUMMARY
+============================================================
+  Date         : 2026-04-27
+  Dataset      : BreakHis Breast Cancer (7,909 images, 324 patients)
+  Split        : 85% train / 15% test by patient ID
+  GPU          : Tesla T4
+============================================================
+
+  MODEL RESULTS:
+  ──────────────────────────────────────────────────────────
+  Model                  AUC     Acc%      F1    Time (min)
+  ──────────────────────────────────────────────────────────
+  EfficientNetB2         0.9862   94.93  0.9629    12.3 ← BEST AUC
+  DeiT-Base              0.9721   95.01  0.9640   108.4 ← BEST ACC/F1
+  ResNet152              0.9780   94.04  0.9571    25.3
+  Xception               0.8827   78.18  0.8259    12.0
+  ──────────────────────────────────────────────────────────
+
+  HEAD-TO-HEAD: DeiT-Base vs EfficientNetB2
+  ──────────────────────────────────────────────────────────
+  Metric          DeiT-Base    EfficientNetB2    Difference
+  ──────────────────────────────────────────────────────────
+  AUC-ROC         0.9721       0.9862           -0.0141 (❌)
+  Accuracy        95.01%       94.93%           +0.08%  (✅)
+  F1 Score        0.9640       0.9629           +0.0011 (✅)
+  Training Time   108.4 min    12.3 min         +96.1 min (❌)
+  ──────────────────────────────────────────────────────────
+
+  HEAD-TO-HEAD: DeiT-Base vs ResNet152
+  ──────────────────────────────────────────────────────────
+  Metric          DeiT-Base    ResNet152         Difference
+  ──────────────────────────────────────────────────────────
+  AUC-ROC         0.9721       0.9780           -0.0059 (❌)
+  Accuracy        95.01%       94.04%           +0.97%  (✅)
+  F1 Score        0.9640       0.9571           +0.0069 (✅)
+  Training Time   108.4 min    25.3 min         +83.1 min (❌)
+  ──────────────────────────────────────────────────────────
+
+  HEAD-TO-HEAD: DeiT-Base vs Xception
+  ──────────────────────────────────────────────────────────
+  Metric          DeiT-Base    Xception          Difference
+  ──────────────────────────────────────────────────────────
+  AUC-ROC         0.9721       0.8827           +0.0894 (✅)
+  Accuracy        95.01%       78.18%           +16.83% (✅)
+  F1 Score        0.9640       0.8259           +0.1381 (✅)
+  Training Time   108.4 min    12.0 min         +96.4 min (❌)
+  ──────────────────────────────────────────────────────────
+
+  KEY FINDINGS:
+  ──────────────────────────────────────────────────────────
+  ✅ DeiT-Base achieves the BEST accuracy (95.01%) and
+     BEST F1 score (0.9640) among all models
+
+  ❌ DeiT-Base does NOT beat EfficientNetB2 in AUC-ROC
+     (0.9721 vs 0.9862, -0.0141 gap)
+
+  ❌ DeiT-Base training is 9× slower than EfficientNetB2
+     (108.4 min vs 12.3 min)
+
+  ✅ DeiT-Base significantly outperforms Xception in all
+     metrics (better architecture choice)
+
+  ⚠️  DeiT-Base overfitted at epoch 9 due to small dataset
+     (7,909 images insufficient for 86M parameters)
+  ──────────────────────────────────────────────────────────
+
+  TRANSFORMER VS CNN ANALYSIS:
+  ──────────────────────────────────────────────────────────
+  1. Transformers need MORE data than CNNs
+     - DeiT-Base: 86M parameters vs EfficientNetB2: ~9M
+     - Stronger inductive bias in CNNs helps small datasets
+
+  2. Pretraining is critical for transformers on small data
+     - DeiT uses ImageNet-1k pretrained weights
+     - Still insufficient for full fine-tuning
+
+  3. Training time disadvantage
+     - Transformers are computationally heavier
+     - Attention mechanism O(n²) complexity
+
+  4. Performance trade-off
+     - Transformers: Better accuracy/F1, worse AUC/time
+     - CNNs: Better AUC/time, slightly lower accuracy/F1
+  ──────────────────────────────────────────────────────────
+
+  RECOMMENDATIONS TO BEAT CNNs:
+  ──────────────────────────────────────────────────────────
+  1. Test-Time Augmentation (TTA)
+     - Expected: +0.005-0.01 AUC gain
+     - No training cost
+
+  2. Increase resolution to 384×384
+     - Expected: +0.003-0.008 AUC gain
+     - +30% training time
+
+  3. Stratified 5-Fold Ensemble
+     - Expected: +0.005-0.015 AUC gain
+     - 5× training time (~9 hours)
+
+  4. Stronger augmentation (MixUp, CutMix)
+     - Expected: +0.002-0.005 AUC gain
+     - Moderate training cost
+
+  5. Reduce overfitting (lower dropout, higher weight decay)
+     - Expected: Better generalization
+     - Minimal training cost
+  ──────────────────────────────────────────────────────────
+
+  CONCLUSION:
+  ──────────────────────────────────────────────────────────
+  DeiT-Base demonstrates competitive performance on the
+  BreakHis breast cancer dataset, achieving the highest
+  accuracy (95.01%) and F1 score (0.9640) among all models.
+
+  However, it does not surpass EfficientNetB2 in AUC-ROC
+  (0.9721 vs 0.9862) and requires 9× more training time.
+
+  For this small medical imaging dataset, CNNs remain the
+  superior choice due to:
+  - Better AUC-ROC performance
+  - Faster training
+  - Stronger inductive bias for small data
+
+  Transformers show promise but require larger datasets or
+  ensemble techniques to consistently outperform CNNs.
+
+  🚨 Research prototype. Not for clinical use.
+============================================================
