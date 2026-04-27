@@ -263,8 +263,8 @@ def _train_epoch_ga(
     optimizer: torch.optim.Optimizer,
     criterion: nn.Module,
     device: torch.device,
-    scaler: GradScaler,
     epoch: int,
+    scaler: GradScaler,
 ) -> tuple[float, float]:
     """Single training epoch with gradient accumulation, label smoothing, and mixed precision.
 
